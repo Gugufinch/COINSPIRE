@@ -609,14 +609,23 @@ const loanPlannerGap=Math.abs(recurringBudgetModel.loanTotal-loanMinTotal);
 const currentSideIncome=monthlySideIncome[mo]||0;
 const availableAfterBills=cur.inc+currentSideIncome-effectiveFixedBase-loanMinTotal-effectiveSubT;
 const allocationGap=availableAfterBills-totB;
-const discretionaryLeft=availableAfterBills-totB-totS;
+const discretionaryLeft=allocationGap;
+const leftToSpend=availableAfterBills-totS;
+const leftAfterSpend=allocationGap-totS;
 const hasAllocationDeficit=allocationGap<0;
-const hasDiscretionaryDeficit=discretionaryLeft<0;
-const budgetGapMagnitude=Math.abs(discretionaryLeft);
-const discretionaryRowLabel=hasDiscretionaryDeficit?"= Over Budget":"= Discretionary Left";
-const discretionaryCardLabel=hasDiscretionaryDeficit?"Over Budget":"Discretionary Left";
-const discretionaryCardColor=hasDiscretionaryDeficit?K.dn:K.ac;
-const discretionaryCardSub=hasDiscretionaryDeficit?"Category plans + spend exceed safe cash":"Safe cash left after plans and spend";
+const hasLeftToSpendDeficit=leftToSpend<0;
+const hasLeftAfterSpendDeficit=leftAfterSpend<0;
+const allocationGapMagnitude=Math.abs(discretionaryLeft);
+const leftAfterSpendMagnitude=Math.abs(leftAfterSpend);
+const discretionaryRowLabel=hasAllocationDeficit?"= Over-allocated":"= Discretionary Left";
+const leftAfterSpendRowLabel=hasLeftAfterSpendDeficit?"= Negative After Spend":"= Left After Spend";
+const discretionaryCardLabel=hasAllocationDeficit?"Over-allocated":"Discretionary Left";
+const discretionaryCardColor=hasAllocationDeficit?K.wn:K.ac;
+const discretionaryCardSub=hasAllocationDeficit?"Planned allocations exceed safe cash. This is not the same as overspending.":"Safe cash not yet assigned to categories.";
+const leftAfterSpendCardLabel=hasLeftAfterSpendDeficit?"Negative After Spend":"Left After Spend";
+const leftAfterSpendCardColor=hasLeftAfterSpendDeficit?K.dn:K.ac;
+const leftAfterSpendCardSub=hasLeftAfterSpendDeficit?"Allocations plus spend exceed safe cash.":"Safe cash left after allocations and spend.";
+const allocationUiNote=hasAllocationDeficit?`Over-allocated means planned category allocations exceed safe cash by ${fmt(allocationGapMagnitude)}. That can be intentional for categories like savings, Roth, or extra principal. It is not the same as overspending.`:"Allocations currently fit inside safe cash. Spend can still move Left To Spend down through the month.";
 const blankCsvStarter=activeUser==="sarah"&&allTxnCount===0&&totalDebt===0&&subs.length===0&&sideInc.length===0&&![bal.sav,bal.ira,bal.stk,bal.jnt,bal.inc,bal.fix].some(Boolean);
 const holdings=activeUser==="greg"?DEMO_HOLDINGS:[];
 const debtBase=activeUser==="greg"?31241:Math.max(totalDebt,0);
@@ -644,51 +653,50 @@ const budgetAuditNotes=[
 ];
 const pennyVoice=useMemo(()=>{
   const trimText=trimTargets.length?`Trim ${trimTargets.join(", ")} first if you want fast relief.`:"Trim a category or raise income if you want breathing room.";
-  const deficitText=`You planned ${fmt(budgetGapMagnitude)} more than this month can safely hold. ${trimText}`;
-  const recoveryText=`You still have ${fmt(discretionaryLeft)} of clean room after fixed costs, category plans, and spend.`;
+  const deficitText=`Planned allocations exceed safe cash by ${fmt(allocationGapMagnitude)}. ${trimText}`;
+  const recoveryText=`You still have ${fmt(discretionaryLeft)} of safe cash not assigned to categories.`;
   const starterText="Bring in the CSV first. Pennyboy would rather work with ugly truth than pretty fake data.";
   const dashboardByPersona={
-    pro:blankCsvStarter?starterText:hasDiscretionaryDeficit?deficitText:`Safe to budget is ${fmt(availableAfterBills)}. ${recoveryText}`,
-    unhinged:blankCsvStarter?starterText:hasDiscretionaryDeficit?`You told ${mo} to carry ${fmt(budgetGapMagnitude)} it absolutely does not have. ${trimText}`:`Month is behaving. ${recoveryText}`,
-    dark:blankCsvStarter?starterText:hasDiscretionaryDeficit?`${fmt(budgetGapMagnitude)} over budget. The spreadsheet noticed before your nervous system did. ${trimText}`:`You have ${fmt(discretionaryLeft)} left after the essentials. A rare and beautiful accident.`,
-    therapist:blankCsvStarter?starterText:hasDiscretionaryDeficit?`You allocated ${fmt(budgetGapMagnitude)} beyond what feels safe. ${trimText}`:`There is ${fmt(discretionaryLeft)} left after the real obligations. Breathe, then decide intentionally.`,
-    hype:blankCsvStarter?starterText:hasDiscretionaryDeficit?`You overshot by ${fmt(budgetGapMagnitude)}. Time to cut dead weight and win the month back.`:`You still have ${fmt(discretionaryLeft)} of firepower left. Clean month. Strong pace.`
+    pro:blankCsvStarter?starterText:hasAllocationDeficit?deficitText:`Safe to budget is ${fmt(availableAfterBills)}. ${recoveryText}`,
+    unhinged:blankCsvStarter?starterText:hasAllocationDeficit?`You told ${mo} to carry ${fmt(allocationGapMagnitude)} it absolutely does not have. ${trimText}`:`Month is behaving. ${recoveryText}`,
+    dark:blankCsvStarter?starterText:hasAllocationDeficit?`${fmt(allocationGapMagnitude)} over-allocated. The spreadsheet noticed before your nervous system did. ${trimText}`:`You still have ${fmt(discretionaryLeft)} sitting outside the plan. Rare. Suspicious. Nice.`,
+    therapist:blankCsvStarter?starterText:hasAllocationDeficit?`You allocated ${fmt(allocationGapMagnitude)} beyond what feels cash-safe. ${trimText}`:`There is ${fmt(discretionaryLeft)} left unassigned. Breathe, then decide intentionally.`,
+    hype:blankCsvStarter?starterText:hasAllocationDeficit?`You over-allocated by ${fmt(allocationGapMagnitude)}. Cut dead weight and win the month back.`:`You still have ${fmt(discretionaryLeft)} of firepower not assigned yet. Clean month. Strong pace.`
   };
   const budgetByPersona={
-    pro:hasDiscretionaryDeficit?`The gap is real and useful: the current plan is ${fmt(budgetGapMagnitude)} over safe cash.`:`The plan fits. Every dollar shown below reconciles to a source.`,
-    unhinged:hasDiscretionaryDeficit?`This page is not being mean. It is correctly yelling that you are ${fmt(budgetGapMagnitude)} over.`:`Math is mathing. The plan still clears with ${fmt(discretionaryLeft)} left.`,
-    dark:hasDiscretionaryDeficit?`${fmt(budgetGapMagnitude)} over budget. Consider this your politely formatted financial obituary.`:`Nothing is hiding. Fixed, subs, debt, and categories all reconcile cleanly.`,
-    therapist:hasDiscretionaryDeficit?`The overspend signal is the feature. It tells you where the plan and reality are arguing.`:`The plan is still safe. Use the breakdown to see what is truly locked in.`,
-    hype:hasDiscretionaryDeficit?`You are ${fmt(budgetGapMagnitude)} over, which means the target is visible and beatable.`:`Budget is holding. Totals are aligned. Keep the pressure on.`
+    pro:hasAllocationDeficit?`The signal is intentional: planned allocations exceed safe cash by ${fmt(allocationGapMagnitude)}.`:`The plan fits. Every dollar shown below reconciles to a source.`,
+    unhinged:hasAllocationDeficit?`This page is not being mean. It is correctly telling you the plan is ${fmt(allocationGapMagnitude)} too large.`:`Math is mathing. The plan still clears with ${fmt(discretionaryLeft)} unassigned.`,
+    dark:hasAllocationDeficit?`${fmt(allocationGapMagnitude)} over-allocated. Consider this a polite cashflow warning, not a spending crime.`:`Nothing is hiding. Fixed, subs, debt, and category plans all reconcile cleanly.`,
+    therapist:hasAllocationDeficit?`The over-allocation signal is the feature. It tells you where the plan and the month are arguing.`:`The plan is still safe. Use the breakdown to see what is truly locked in.`,
+    hype:hasAllocationDeficit?`You are over-allocated by ${fmt(allocationGapMagnitude)}. Good. Now the target is visible and beatable.`:`Budget is holding. Totals are aligned. Keep the pressure on.`
   };
   return{
     dashboard:dashboardByPersona[persona]||dashboardByPersona.pro,
     budget:budgetByPersona[persona]||budgetByPersona.pro
   };
-},[availableAfterBills,blankCsvStarter,budgetGapMagnitude,discretionaryLeft,fmt,hasDiscretionaryDeficit,mo,persona,trimTargets]);
+},[allocationGapMagnitude,availableAfterBills,blankCsvStarter,discretionaryLeft,fmt,hasAllocationDeficit,mo,persona,trimTargets]);
 const budgetFlowSegments=[
   {label:"Fixed-Bill Base",value:effectiveFixedBase,color:K.dn},
   {label:"Subscription Run Rate",value:effectiveSubT,color:K.wn},
   {label:"Required Debt Payments",value:loanMinTotal,color:K.pp},
   {label:"Safe To Budget",value:Math.max(availableAfterBills,0),color:availableAfterBills>=0?K.ac:K.dn}
 ];
-const planPressureBase=Math.max(availableAfterBills,totB+totS,1);
-const planPressureSegments=hasDiscretionaryDeficit
+const planPressureBase=Math.max(availableAfterBills,totB,1);
+const planPressureSegments=hasAllocationDeficit
   ?[
-    {label:"Budgeted Across Categories",value:totB,color:K.bl},
-    {label:"Spent So Far",value:totS,color:K.ac},
-    {label:"Over Budget",value:Math.abs(discretionaryLeft),color:K.dn}
+    {label:"Safe To Budget",value:Math.max(availableAfterBills,0),color:K.ac},
+    {label:"Over-allocated",value:allocationGapMagnitude,color:K.wn}
   ]
   :[
     {label:"Budgeted Across Categories",value:totB,color:K.bl},
-    {label:"Spent So Far",value:totS,color:K.ac},
     {label:"Discretionary Left",value:Math.max(discretionaryLeft,0),color:K.ac}
   ];
 const budgetScoreboard=[
   {label:"Safe To Budget",value:fmt(availableAfterBills),tone:availableAfterBills>=0?K.ac:K.dn,sub:`${fmt(effectiveFixedBase)} fixed · ${fmt(effectiveSubT)} subs · ${fmt(loanMinTotal)} debt`},
-  {label:"Allocated",value:fmt(totB),tone:totB<=availableAfterBills?K.bl:K.dn,sub:`Across ${cats.length} categories`},
-  {label:"Spent",value:fmt(totS),tone:totS>totB?K.dn:K.ac,sub:txns.length?`${txns.filter(t=>t.kind!=="income").length} spend rows logged`:"No spend rows yet"},
-  {label:discretionaryCardLabel,value:fmt(Math.abs(discretionaryLeft)),tone:discretionaryCardColor,sub:discretionaryCardSub}
+  {label:"Budgeted Across Categories",value:fmt(totB),tone:totB<=availableAfterBills?K.bl:K.wn,sub:`Across ${cats.length} categories`},
+  {label:discretionaryCardLabel,value:fmt(Math.abs(discretionaryLeft)),tone:discretionaryCardColor,sub:discretionaryCardSub},
+  {label:"Spent So Far",value:fmt(totS),tone:totS>availableAfterBills?K.dn:K.bl,sub:hasLeftToSpendDeficit?`${fmt(Math.abs(leftToSpend))} past safe cash before allocations`:`${fmt(leftToSpend)} left to spend before allocations`},
+  {label:leftAfterSpendCardLabel,value:fmt(hasLeftAfterSpendDeficit?leftAfterSpendMagnitude:leftAfterSpend),tone:leftAfterSpendCardColor,sub:leftAfterSpendCardSub}
 ];
 
 const savRate=(cur.inc+currentSideIncome)>0?((cur.inc+currentSideIncome-effectiveFixedBase-loanMinTotal-effectiveSubT-totS)/(cur.inc+currentSideIncome)*100):0;
@@ -896,14 +904,14 @@ if(tab==="dash")return(<div>
 <div style={{fontSize:12,color:K.mt,marginTop:6}}>{todayStr} {"·"} {now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})} {"·"} {mo}</div>
 <div style={{fontSize:12,color:K.mt,marginTop:8,maxWidth:560,lineHeight:1.55}}>{blankCsvStarter?"Sarah starts blank on purpose. Bring in a bank CSV first, then shape budgets, balances, debts, and goals off real data.":"A clearer month-at-a-glance view: what is left after fixed costs, what is already spent, and whether this month still supports your bigger goals."}</div>
 <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,minmax(0,1fr))",gap:8,marginTop:14}}>
-{[{l:"Safe To Budget",v:fmt(availableAfterBills),sub:`${fmt(effectiveFixedBase)} fixed · ${fmt(effectiveSubT)} subs · ${fmt(loanMinTotal)} debt`,c:availableAfterBills>=0?K.ac:K.dn},{l:"Allocated",v:fmt(totB),sub:`Across ${cats.length} categories`,c:totB<=availableAfterBills?K.bl:K.dn},{l:"Spent So Far",v:fmt(totS),sub:`Projected ${fmt(projT)}`,c:totS>totB?K.dn:K.bl},{l:discretionaryCardLabel,v:fmt(Math.abs(discretionaryLeft)),sub:discretionaryCardSub,c:discretionaryCardColor}].map((x,i)=>(<div key={i} style={{padding:"10px 11px",borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}><div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:5}}>{x.l}</div><div style={{fontSize:18,fontWeight:800,letterSpacing:-.6,color:x.c}}>{x.v}</div><div style={{fontSize:9,color:K.mt,marginTop:3,lineHeight:1.45}}>{x.sub}</div></div>))}
+{[{l:"Safe To Budget",v:fmt(availableAfterBills),sub:`${fmt(effectiveFixedBase)} fixed · ${fmt(effectiveSubT)} subs · ${fmt(loanMinTotal)} debt`,c:availableAfterBills>=0?K.ac:K.dn},{l:"Budgeted",v:fmt(totB),sub:`Across ${cats.length} categories`,c:totB<=availableAfterBills?K.bl:K.wn},{l:"Spent So Far",v:fmt(totS),sub:`${hasLeftToSpendDeficit?`${fmt(Math.abs(leftToSpend))} past safe cash`:`${fmt(leftToSpend)} left to spend`}`,c:totS>availableAfterBills?K.dn:K.bl},{l:discretionaryCardLabel,v:fmt(Math.abs(discretionaryLeft)),sub:discretionaryCardSub,c:discretionaryCardColor}].map((x,i)=>(<div key={i} style={{padding:"10px 11px",borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}><div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:5}}>{x.l}</div><div style={{fontSize:18,fontWeight:800,letterSpacing:-.6,color:x.c}}>{x.v}</div><div style={{fontSize:9,color:K.mt,marginTop:3,lineHeight:1.45}}>{x.sub}</div></div>))}
 </div>
 </div>
 </div>
 </div>
 <div style={{display:"grid",gap:12}}>
 {blankCsvStarter?<div style={{...crd,background:`linear-gradient(135deg,${K.ac}10,${K.cd})`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:10}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1.2,textTransform:"uppercase",fontWeight:700}}>Sarah Starter</div><div style={{fontSize:22,fontWeight:800,letterSpacing:-.8,marginTop:6}}>Start With CSV Only</div><div style={{fontSize:11,color:K.mt,marginTop:4,lineHeight:1.5}}>No seeded transactions, no fake balances, no borrowed goals. Import the bank feed first and let the rest of the profile follow real activity.</div></div><button onClick={()=>setModal("bankcsv")} style={{...btn(true),whiteSpace:"nowrap"}}><Upload size={11}/>Upload CSV</button></div><div style={{padding:12,borderRadius:12,background:K.bg,border:"1px solid "+K.bd,display:"grid",gap:6}}><div style={{fontSize:10,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>What Happens Next</div><div style={{fontSize:11,color:K.mt,lineHeight:1.6}}>1. Paste a Chase, Capital One, or Debit CSV. 2. Import it into the right month. 3. Then set budgets and balances only where you actually need them.</div></div></div>:<><div style={{...crd,background:`linear-gradient(135deg,${K.ac}0c,${K.cd})`}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:10}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1.2,textTransform:"uppercase",fontWeight:700}}>Pennyboy Take</div><div style={{fontSize:24,fontWeight:800,color:hasDiscretionaryDeficit?K.dn:savRate>10?K.ac:K.wn,letterSpacing:-.8,marginTop:6,lineHeight:1.05}}>{hasDiscretionaryDeficit?`${fmt(budgetGapMagnitude)} Over`:fmt(discretionaryLeft)}</div><div style={{fontSize:11,color:K.mt,marginTop:4,lineHeight:1.55}}>{pennyVoice.dashboard}</div></div><button onClick={()=>setCmpMode(!cmpMode)} style={{...btn(false),color:cmpMode?K.ac:K.mt,background:cmpMode?K.ad:"transparent",whiteSpace:"nowrap"}}>{cmpMode?compareLabel:`Compare ${mo} vs ${prevMK||"previous"}`}</button></div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:10}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1.2,textTransform:"uppercase",fontWeight:700}}>Pennyboy Take</div><div style={{fontSize:24,fontWeight:800,color:hasAllocationDeficit?K.wn:savRate>10?K.ac:K.wn,letterSpacing:-.8,marginTop:6,lineHeight:1.05}}>{hasAllocationDeficit?`${fmt(allocationGapMagnitude)} Over-allocated`:fmt(discretionaryLeft)}</div><div style={{fontSize:11,color:K.mt,marginTop:4,lineHeight:1.55}}>{pennyVoice.dashboard}</div></div><button onClick={()=>setCmpMode(!cmpMode)} style={{...btn(false),color:cmpMode?K.ac:K.mt,background:cmpMode?K.ad:"transparent",whiteSpace:"nowrap"}}>{cmpMode?compareLabel:`Compare ${mo} vs ${prevMK||"previous"}`}</button></div>
 <div style={{padding:12,borderRadius:12,background:K.bg,border:"1px solid "+K.bd,cursor:"pointer"}} onClick={()=>setInsI(i=>(i+1)%insights.length)}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{fontSize:18}}>{insights[insI]?.icon}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Voice Check {"·"} {PERSONAS[persona]?.icon}</div><div style={{fontSize:12,color:insights[insI]?.color,fontWeight:600,lineHeight:1.5}}>{insights[insI]?.text}</div><div style={{fontSize:10,color:K.mt,marginTop:6,lineHeight:1.5}}>{trimTargets.length?`Fastest trims right now: ${trimTargets.join(", ")}.`:`Next move: tighten a discretionary category or add side income.`}</div></div></div><div style={{display:"flex",gap:4,marginTop:10}}>{insights.map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:3,background:i===insI?K.ac:K.bd}}/>)}</div></div>
 </div>
 <div style={{...crd,padding:12,background:`linear-gradient(135deg,${K.ac}08,${K.cd})`}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><Zap size={14} color={K.ac}/><div style={{fontSize:10,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Quick Add</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><input value={qa} onChange={e=>setQa(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleQA()} placeholder='$45 marianos' style={{...inp,border:"1px solid "+K.bd,background:K.bg,flex:1,padding:"10px 12px"}}/><button onClick={handleQA} disabled={!qa.trim()} style={{...btn(true),padding:"10px 12px",opacity:qa.trim()?1:.45}}>Add</button></div><div style={{fontSize:10,color:K.mt,marginTop:8}}>Type amount + merchant and Coinspire will categorize it.</div></div></>}
@@ -957,22 +965,22 @@ if(tab==="txn")return(<div>
 if(tab==="bud")return(<div>
 <div style={{marginBottom:12}}><div style={{fontSize:18,fontWeight:700}}>Budget Truth Source</div><div style={{fontSize:11,color:K.mt,marginTop:3}}>{compareLabel}. This page now treats the live fixed-bill base, subscription run rate, and required debt payments as separate layers before the category budget.</div></div>
 <div style={{position:"sticky",top:mob?62:8,zIndex:20,marginBottom:12,paddingBottom:8,background:`linear-gradient(180deg, ${K.bg} 72%, ${K.bg}00)`}}>
-<div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,minmax(0,1fr))",gap:10}}>
+<div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(5,minmax(0,1fr))",gap:10}}>
 {budgetScoreboard.map(card=><div key={card.label} style={{padding:"12px 13px",borderRadius:16,background:K.cd,border:"1px solid "+K.bd,boxShadow:"0 12px 28px rgba(0,0,0,.08)"}}><div style={{fontSize:9,color:K.dm,letterSpacing:1.1,textTransform:"uppercase",fontWeight:700,marginBottom:5}}>{card.label}</div><div style={{fontSize:mob?22:26,fontWeight:800,letterSpacing:-.9,color:card.tone}}>{card.value}</div><div style={{fontSize:10,color:K.mt,marginTop:4,lineHeight:1.45}}>{card.sub}</div></div>)}
 </div>
 </div>
 <div style={{display:"grid",gridTemplateColumns:g2,gap:10,marginBottom:12}}>
-<PennyPanel title={hasDiscretionaryDeficit?`Over Budget by ${fmt(budgetGapMagnitude)}`:`${fmt(discretionaryLeft)} Still Free`} body={pennyVoice.budget} note={cmpMode&&prevMK?`Comparison mode is live: ${compareLabel}.`:`Turn comparison on if you want the month-over-month labels called out directly.`} tone={hasDiscretionaryDeficit?K.dn:K.ac} action={trimTargets.length?`Best trim candidates right now: ${trimTargets.join(", ")}.`:`No big discretionary buckets are loaded yet.`}/>
+<PennyPanel title={hasAllocationDeficit?`Over-allocated by ${fmt(allocationGapMagnitude)}`:`${fmt(discretionaryLeft)} Still Unassigned`} body={pennyVoice.budget} note={`${allocationUiNote} ${cmpMode&&prevMK?`Comparison mode is live: ${compareLabel}.`:`Turn comparison on if you want the month-over-month labels called out directly.`}`} tone={hasAllocationDeficit?K.wn:K.ac} action={trimTargets.length?`Best trim candidates right now: ${trimTargets.join(", ")}.`:`No big discretionary buckets are loaded yet.`}/>
 <div style={{...crd,background:`linear-gradient(135deg,${K.ac}0d,${K.cd})`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1.2,textTransform:"uppercase",fontWeight:700}}>Budget Rails</div><div style={{fontSize:11,color:K.mt,marginTop:4}}>Hover the rails or open the drawer below to see what feeds each total.</div></div><button onClick={()=>setBudgetExplainOpen(v=>!v)} style={{...btn(false),background:budgetExplainOpen?K.ad:"transparent",color:budgetExplainOpen?K.ac:K.tx}}>{budgetExplainOpen?"Hide breakdown":"Why These Totals?"}</button></div>
 <div style={{display:"grid",gap:10}}>
 <StackRail title="Income Waterfall" total={cur.inc+currentSideIncome} segments={budgetFlowSegments} footer={`${fmt(cur.inc+currentSideIncome)} in gross + side income`} />
-<StackRail title="Plan Pressure" total={planPressureBase} segments={planPressureSegments} footer={hasDiscretionaryDeficit?`Needs ${fmt(budgetGapMagnitude)} of cuts or new income.`:`Plan still leaves ${fmt(discretionaryLeft)} unassigned.`} />
+<StackRail title="Allocation Pressure" total={planPressureBase} segments={planPressureSegments} footer={hasAllocationDeficit?`Planned allocations exceed safe cash by ${fmt(allocationGapMagnitude)}.`:`Plan still leaves ${fmt(discretionaryLeft)} unassigned.`} />
 </div>
 </div>
 </div>
 <div style={{...crd,marginBottom:12,background:`linear-gradient(135deg,${K.ac}08,${K.cd})`}}><div style={{display:"grid",gap:4}}>
-{[{l:"Gross Income",v:cur.inc,c:K.ac},{l:"+ Side Income This Month",v:currentSideIncome,c:K.bl},{l:fixedBaseLabel,v:-effectiveFixedBase,c:K.dn},{l:"− Subscription Run Rate",v:-effectiveSubT,c:K.wn},{l:"− Required Debt Payments",v:-loanMinTotal,c:K.pp},{l:"= Safe To Budget",v:availableAfterBills,c:availableAfterBills>=0?K.ac:K.dn,bold:true},{l:"Budgeted Across Categories",v:totB,c:K.bl},{l:"Spent So Far",v:totS,c:K.dn},{l:discretionaryRowLabel,v:Math.abs(discretionaryLeft),c:discretionaryCardColor,bold:true}].map(row=>(<div key={row.l} style={{display:"flex",justifyContent:"space-between",padding:"6px 8px",background:row.bold?K.bg:"transparent",borderRadius:row.bold?8:0,fontWeight:row.bold?700:500}}><span style={{fontSize:11,color:row.bold?K.tx:K.mt}}>{row.l}</span><span style={{fontSize:12,fontWeight:700,color:row.c}}>{fmt(row.v)}</span></div>))}
+{[{l:"Gross Income",v:cur.inc,c:K.ac},{l:"+ Side Income This Month",v:currentSideIncome,c:K.bl},{l:fixedBaseLabel,v:-effectiveFixedBase,c:K.dn},{l:"− Subscription Run Rate",v:-effectiveSubT,c:K.wn},{l:"− Required Debt Payments",v:-loanMinTotal,c:K.pp},{l:"= Safe To Budget",v:availableAfterBills,c:availableAfterBills>=0?K.ac:K.dn,bold:true},{l:"Budgeted Across Categories",v:totB,c:K.bl},{l:discretionaryRowLabel,v:Math.abs(discretionaryLeft),c:discretionaryCardColor,bold:true},{l:"Spent So Far",v:totS,c:K.dn},{l:"= Left To Spend",v:leftToSpend,c:hasLeftToSpendDeficit?K.dn:K.ac,bold:true},{l:leftAfterSpendRowLabel,v:hasLeftAfterSpendDeficit?leftAfterSpendMagnitude:leftAfterSpend,c:leftAfterSpendCardColor,bold:true}].map(row=>(<div key={row.l} style={{display:"flex",justifyContent:"space-between",padding:"6px 8px",background:row.bold?K.bg:"transparent",borderRadius:row.bold?8:0,fontWeight:row.bold?700:500}}><span style={{fontSize:11,color:row.bold?K.tx:K.mt}}>{row.l}</span><span style={{fontSize:12,fontWeight:700,color:row.c}}>{fmt(row.v)}</span></div>))}
 {budgetAuditNotes.length>0&&<div style={{padding:"8px 10px",borderRadius:8,background:K.bg,border:"1px solid "+K.bd,fontSize:10,color:K.mt,lineHeight:1.55,display:"grid",gap:6}}>{budgetAuditNotes.map(note=><div key={note}>{note}</div>)}</div>}
 {budOver>0&&<div style={{padding:"6px 8px",fontSize:10,color:K.dn,background:K.dd,borderRadius:8}}>Category budgets are still {fmt(budOver)} above what is safe after fixed costs.</div>}
 </div></div>
