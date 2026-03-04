@@ -72,6 +72,7 @@ const DEMO_HOLDINGS=[
 ];
 
 const DCAT=[{id:"groceries",n:"Groceries",b:500},{id:"electric",n:"Electric",b:50},{id:"gas",n:"Gas/Utility",b:100},{id:"transport",n:"Transport",b:125},{id:"rec",n:"Recreation",b:400},{id:"shop",n:"Shopping",b:400},{id:"misc",n:"Misc",b:250},{id:"fun",n:"Fun Money",b:300},{id:"save",n:"Savings",b:400},{id:"travel",n:"Travel",b:400},{id:"ira",n:"Roth IRA",b:200},{id:"loan",n:"Extra Principal",b:751}];
+const ALLOCATION_CAT_IDS=new Set(["save","ira","loan"]);
 const CI={groceries:"\u{1F6D2}",electric:"\u26A1",gas:"\u{1F525}",transport:"\u{1F697}",rec:"\u{1F3AD}",shop:"\u{1F6CD}\uFE0F",misc:"\u{1F4E6}",fun:"\u{1F389}",save:"\u{1F4B0}",travel:"\u2708\uFE0F",ira:"\u{1F4C8}",loan:"\u{1F4B3}"};
 
 const SUBS_D=[
@@ -488,7 +489,7 @@ const[debts,setDebts]=useState(()=>cloneItems(DEBTS_D));const[subs,setSubs]=useS
 const[cScores,setCScores]=useState([]);const[csForm,setCsForm]=useState({score:"",date:now.toISOString().slice(0,7)});
 const[apiKey,setApiKey]=useState("");const[aiModel,setAiModel]=useState("claude-sonnet-4-20250514");const[aiSysP,setAiSysP]=useState("");
 const[allTags,setAllTags]=useState(["europe","studio","date-night","sarah","business"]);const[tagIn,setTagIn]=useState("");
-const[whatIf,setWhatIf]=useState(null);const[sideInc,setSideInc]=useState([]);const[userGoals,setUserGoals]=useState(null);const[goalModal,setGoalModal]=useState(false);const[goalI,setGoalI]=useState(0);const[goalContribs,setGoalContribs]=useState({});const[catRules,setCatRules]=useState({});const[budgetTemplates,setBudgetTemplates]=useState({});const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());const[recurring,setRecurring]=useState(()=>cloneRecurring(FBILLS));const[dismissedCards,setDismissedCards]=useState([]);const[goalEditMode,setGoalEditMode]=useState(false);const[budgetExplainOpen,setBudgetExplainOpen]=useState(false);
+const[whatIf,setWhatIf]=useState(null);const[sideInc,setSideInc]=useState([]);const[userGoals,setUserGoals]=useState(null);const[goalModal,setGoalModal]=useState(false);const[goalI,setGoalI]=useState(0);const[goalContribs,setGoalContribs]=useState({});const[catRules,setCatRules]=useState({});const[budgetTemplates,setBudgetTemplates]=useState({});const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());const[recurring,setRecurring]=useState(()=>cloneRecurring(FBILLS));const[recurringDrafts,setRecurringDrafts]=useState({});const[dismissedCards,setDismissedCards]=useState([]);const[goalEditMode,setGoalEditMode]=useState(false);const[budgetExplainOpen,setBudgetExplainOpen]=useState(false);
 const[reportFrom,setReportFrom]=useState(curMK);const[reportTo,setReportTo]=useState(curMK);
 const[moneyEdit,setMoneyEdit]=useState({key:null,value:""});
 const[winW,setWinW]=useState(typeof window!=='undefined'?window.innerWidth:1200);
@@ -497,7 +498,13 @@ useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("r
 const mob=winW<768;
 
 useEffect(()=>{let cancelled=false;setLoaded(false);(async()=>{const data=await load(activeUser);if(cancelled)return;const{profile,shouldReset}=normalizeProfile(data,activeUser,curMK);setMos(profile.mos);setTheme(profile.theme);setAcI(profile.acI);setBal(profile.bal);setDebts(profile.debts);setSubs(profile.subs);setCScores(profile.cScores);setPersona(profile.persona);setApiKey(profile.apiKey);setAiModel(profile.aiModel);setAiSysP(profile.aiSysP);setAllTags(profile.allTags);setSideInc(profile.sideInc);setUserGoals(profile.userGoals);setDismissedCards(profile.dismissedCards);setGoalContribs(profile.goalContribs);setRecurring(profile.recurring||cloneRecurring(FBILLS));setCatRules(profile.catRules);setBudgetTemplates(profile.budgetTemplates);if(shouldReset&&!cancelled)await sv(profile,activeUser);setMo(curMK);setLoaded(true)})();return()=>{cancelled=true}},[activeUser,curMK]);
-useEffect(()=>{if(loaded)sv({profileMode:activeUser==="sarah"?"blank-csv":"demo-greg",mos,mo,theme,acI,bal,debts,subs,cScores,persona,apiKey,aiModel,aiSysP,allTags,sideInc,userGoals,dismissedCards,goalContribs,recurring,catRules,budgetTemplates},activeUser)},[activeUser,acI,aiModel,aiSysP,allTags,apiKey,bal,budgetTemplates,cScores,catRules,debts,dismissedCards,goalContribs,loaded,mo,mos,persona,recurring,sideInc,subs,theme,userGoals]);
+useEffect(()=>{setRecurringDrafts({})},[activeUser,mo]);
+useEffect(()=>{
+  if(!loaded)return;
+  const payload={profileMode:activeUser==="sarah"?"blank-csv":"demo-greg",mos,mo,theme,acI,bal,debts,subs,cScores,persona,apiKey,aiModel,aiSysP,allTags,sideInc,userGoals,dismissedCards,goalContribs,recurring,catRules,budgetTemplates};
+  const timeout=window.setTimeout(()=>{sv(payload,activeUser)},250);
+  return()=>window.clearTimeout(timeout);
+},[activeUser,acI,aiModel,aiSysP,allTags,apiKey,bal,budgetTemplates,cScores,catRules,debts,dismissedCards,goalContribs,loaded,mo,mos,persona,recurring,sideInc,subs,theme,userGoals]);
 
 const txns=mos[mo]?.txns||[];const cats=mos[mo]?.budgets||DCAT;
 const setTxns=fn=>setMos(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
@@ -612,9 +619,37 @@ const allocationGap=availableAfterBills-totB;
 const discretionaryLeft=allocationGap;
 const leftToSpend=availableAfterBills-totS;
 const leftAfterSpend=allocationGap-totS;
+const plannedAllocationBudget=cats.filter(cat=>ALLOCATION_CAT_IDS.has(cat.id)).reduce((sum,cat)=>sum+(cat.b||0),0);
+const plannedExpenseBudget=totB-plannedAllocationBudget;
+const allocationPressureRows=useMemo(()=>{
+  let cumulative=0;
+  return cats.filter(cat=>(cat.b||0)>0).map(cat=>{
+    cumulative+=cat.b||0;
+    const delta=cumulative-availableAfterBills;
+    return{
+      ...cat,
+      type:ALLOCATION_CAT_IDS.has(cat.id)?"allocation":"expense",
+      cumulative,
+      delta,
+      crosses:delta>0
+    };
+  });
+},[availableAfterBills,cats]);
+const allocationPressureMap=useMemo(()=>Object.fromEntries(allocationPressureRows.map(row=>[row.id,row])),[allocationPressureRows]);
+const firstAllocationCross=allocationPressureRows.find(row=>row.crosses)||null;
+const allocationCrossRows=allocationPressureRows.filter(row=>row.crosses);
+const allocationOnlyCrossRows=allocationCrossRows.filter(row=>row.type==="allocation");
+const expensePlanSlack=availableAfterBills-plannedExpenseBudget;
+const allocationDriverRows=allocationOnlyCrossRows.length?allocationOnlyCrossRows:allocationCrossRows;
+const allocationDriverNames=allocationDriverRows.slice(0,4).map(row=>row.n);
 const hasAllocationDeficit=allocationGap<0;
 const hasLeftToSpendDeficit=leftToSpend<0;
 const hasLeftAfterSpendDeficit=leftAfterSpend<0;
+const allocationCrossSummary=hasAllocationDeficit
+  ?plannedExpenseBudget<=availableAfterBills
+    ?`Expense categories total ${fmt(plannedExpenseBudget)} and still fit inside safe cash. The gap is coming from planned allocations${allocationDriverNames.length?` like ${allocationDriverNames.join(", ")}`:""}.`
+    :`Expense categories alone total ${fmt(plannedExpenseBudget)}, which is ${fmt(Math.abs(expensePlanSlack))} over safe cash before any allocation goals are added.`
+  :`No category budget crosses the safe cash line right now. Expenses leave ${fmt(expensePlanSlack)} before allocation goals.`;
 const allocationGapMagnitude=Math.abs(discretionaryLeft);
 const leftAfterSpendMagnitude=Math.abs(leftAfterSpend);
 const discretionaryRowLabel=hasAllocationDeficit?"= Over-allocated":"= Discretionary Left";
@@ -625,7 +660,7 @@ const discretionaryCardSub=hasAllocationDeficit?"Planned allocations exceed safe
 const leftAfterSpendCardLabel=hasLeftAfterSpendDeficit?"Negative After Spend":"Left After Spend";
 const leftAfterSpendCardColor=hasLeftAfterSpendDeficit?K.dn:K.ac;
 const leftAfterSpendCardSub=hasLeftAfterSpendDeficit?"Allocations plus spend exceed safe cash.":"Safe cash left after allocations and spend.";
-const allocationUiNote=hasAllocationDeficit?`Over-allocated means planned category allocations exceed safe cash by ${fmt(allocationGapMagnitude)}. That can be intentional for categories like savings, Roth, or extra principal. It is not the same as overspending.`:"Allocations currently fit inside safe cash. Spend can still move Left To Spend down through the month.";
+const allocationUiNote=hasAllocationDeficit?`Over-allocated means planned category allocations exceed safe cash by ${fmt(allocationGapMagnitude)}. Expense categories total ${fmt(plannedExpenseBudget)} and allocation goals add ${fmt(plannedAllocationBudget)}. That can be intentional for categories like savings, Roth, or extra principal. It is not the same as overspending.`:`Allocations currently fit inside safe cash. Expense categories use ${fmt(plannedExpenseBudget)} and allocation goals add ${fmt(plannedAllocationBudget)}. Spend can still move Left To Spend down through the month.`;
 const blankCsvStarter=activeUser==="sarah"&&allTxnCount===0&&totalDebt===0&&subs.length===0&&sideInc.length===0&&![bal.sav,bal.ira,bal.stk,bal.jnt,bal.inc,bal.fix].some(Boolean);
 const holdings=activeUser==="greg"?DEMO_HOLDINGS:[];
 const debtBase=activeUser==="greg"?31241:Math.max(totalDebt,0);
@@ -756,7 +791,37 @@ const handleQA=()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){const desc=m[2]
 const startNew=()=>{if(!mos[curMK]){setMos(p=>({...p,[curMK]:makeMonth(cats)}));}setMo(curMK)};
 const logFixed=()=>{const bills=recurringRows;const d=now.toISOString().split("T")[0];setTxns(p=>[...bills.map((bill,index)=>makeTxn({...bill,id:Date.now()+index,d,tags:[]},bill.card,"manual")),...p])};
 const addRecurring=(desc,amt,cat,card)=>setRecurring(list=>[...(list||cloneRecurring(FBILLS)),normalizeRecurringItem({desc,amt:+amt,cat:cat||"misc",card:card||"debit"})]);
-const removeRecurring=idx=>setRecurring(list=>(list||cloneRecurring(FBILLS)).filter((_,index)=>index!==idx));
+const recurringDraftKey=(billId,field)=>`${billId}:${field}`;
+const recurringDraftValue=(bill,field)=>Object.prototype.hasOwnProperty.call(recurringDrafts,recurringDraftKey(bill.id,field))?recurringDrafts[recurringDraftKey(bill.id,field)]:String(field==="day"?(bill.day||1):(bill[field]??""));
+const setRecurringDraftValue=(billId,field,value)=>setRecurringDrafts(prev=>({...prev,[recurringDraftKey(billId,field)]:value}));
+const clearRecurringDraftValue=(billId,field)=>setRecurringDrafts(prev=>{
+  const key=recurringDraftKey(billId,field);
+  if(!Object.prototype.hasOwnProperty.call(prev,key))return prev;
+  const next={...prev};
+  delete next[key];
+  return next;
+});
+const commitRecurringDraft=(index,bill,field)=>{
+  const key=recurringDraftKey(bill.id,field);
+  if(!Object.prototype.hasOwnProperty.call(recurringDrafts,key))return;
+  const raw=String(recurringDrafts[key]??"").trim();
+  clearRecurringDraftValue(bill.id,field);
+  if(raw==="")return;
+  if(field==="day"){
+    const parsed=Math.max(1,Math.round(Number(raw)));
+    if(Number.isNaN(parsed))return;
+    editRecurring(index,"day",parsed);
+    return;
+  }
+  const parsed=Math.max(0,Number(raw));
+  if(Number.isNaN(parsed))return;
+  editRecurring(index,"amt",parsed);
+};
+const removeRecurring=idx=>{
+  const target=recurringRows[idx];
+  if(target)setRecurringDrafts(prev=>Object.fromEntries(Object.entries(prev).filter(([key])=>!key.startsWith(`${target.id}:`))));
+  setRecurring(list=>(list||cloneRecurring(FBILLS)).filter((_,index)=>index!==idx));
+};
 const editRecurring=(idx,field,val)=>setRecurring(list=>(list||cloneRecurring(FBILLS)).map((item,index)=>index===idx?{...item,[field]:field==="amt"||field==="day"?+val:val}:item));
 const exportCSV=()=>{const h="Date,Description,Amount,Category,Card,Tags\n";const r=txns.map(t=>`${t.d},"${t.desc}",${t.amt},${t.cat},${t.card},"${(t.tags||[]).join(";")}"`).join("\n");const b=new Blob([h+r],{type:"text/csv"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`coinspire_${mo}.csv`;a.click()};
 const uBal=(k,v)=>{const stamp=new Date().toISOString();setBal(p=>({...p,[k]:v,lastEdit:stamp}));rememberSnapshot({[k]:v,lastEdit:stamp,loans:totalDebt,inc:k==="inc"?v:bal.inc,fix:k==="fix"?v:bal.fix})};
@@ -787,7 +852,7 @@ const btn=p=>({padding:"5px 11px",borderRadius:7,border:p?"none":"1px solid "+K.
 const tgS={display:"inline-block",padding:"1px 5px",borderRadius:8,fontSize:9,fontWeight:600,background:K.pp+"25",color:K.pp,marginRight:2};
 const Stat=({t,v,c,sub,icon:I,color=K.ac,onEdit,editControl,delay=0})=>(<div style={{...crd,animation:"slideUp .4s ease "+delay+"s both"}}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:600,marginBottom:5}}>{t}</div><div style={{fontSize:22,fontWeight:700,letterSpacing:-1,color}}>{v}</div>{c!==undefined&&<div style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:500,color:c>=0?K.ac:K.dn,background:c>=0?K.ad:K.dd,padding:"2px 6px",borderRadius:10,marginTop:4}}>{c>=0?<ArrowUpRight size={10}/>:<ArrowDownRight size={10}/>}{Math.abs(c).toFixed(1)}%</div>}{sub&&<div style={{fontSize:10,color:K.mt,marginTop:4,lineHeight:1.45}}>{sub}</div>}</div><div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}><div style={{padding:8,borderRadius:10,background:`linear-gradient(135deg, ${color}20, ${color}08)`}}><I size={15} color={color}/></div>{editControl||onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",color:K.dm,cursor:"pointer"}}><Edit3 size={9}/></button>}</div></div></div>);
 const InlineMoneyEdit=({editKey,currentValue,onSave,triggerContent="edit",triggerTone=K.ac,inputWidth=92,compact=false})=>moneyEdit.key===editKey?(<div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4,flexWrap:"wrap",marginTop:compact?0:4}}><input autoFocus type="number" step="0.01" min="0" value={moneyEdit.value} onChange={e=>setMoneyEdit(state=>({...state,value:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")commitMoneyEdit(onSave);if(e.key==="Escape")cancelMoneyEdit()}} style={{...inp,padding:"4px 6px",fontSize:10,width:inputWidth}}/><button onClick={()=>commitMoneyEdit(onSave)} style={{...btn(true),padding:"4px 7px"}}><Save size={10}/></button><button onClick={cancelMoneyEdit} style={{...btn(false),padding:"4px 7px"}}><X size={10}/></button></div>):(<button onClick={()=>startMoneyEdit(editKey,currentValue)} style={{display:"inline-flex",alignItems:"center",gap:3,background:"none",border:"none",color:triggerTone,cursor:"pointer",padding:0,fontSize:compact?9:10}}>{triggerContent}</button>);
-const TonePill=({tone="fixed",label})=>{const palette=tone==="sub"?{bg:K.wn+"18",tx:K.wn}:tone==="debt"?{bg:K.pp+"18",tx:K.pp}:tone==="warn"?{bg:K.dn+"18",tx:K.dn}:tone==="safe"?{bg:K.ac+"18",tx:K.ac}:{bg:K.bl+"18",tx:K.bl};return(<span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 7px",borderRadius:999,background:palette.bg,color:palette.tx,fontSize:9,fontWeight:700,letterSpacing:.3,textTransform:"uppercase"}}>{label}</span>)};
+const TonePill=({tone="fixed",label})=>{const palette=tone==="sub"?{bg:K.wn+"18",tx:K.wn}:tone==="debt"||tone==="alloc"?{bg:K.pp+"18",tx:K.pp}:tone==="warn"?{bg:K.dn+"18",tx:K.dn}:tone==="safe"?{bg:K.ac+"18",tx:K.ac}:{bg:K.bl+"18",tx:K.bl};return(<span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 7px",borderRadius:999,background:palette.bg,color:palette.tx,fontSize:9,fontWeight:700,letterSpacing:.3,textTransform:"uppercase"}}>{label}</span>)};
 const StackRail=({title,total,segments,footer})=>{const base=Math.max(total||0,1);return(<div style={{padding:12,borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{title}</div><div style={{fontSize:16,fontWeight:800,letterSpacing:-.5}}>{fmt(total)}</div></div><div style={{fontSize:10,color:K.mt,textAlign:"right",maxWidth:180,lineHeight:1.45}}>{footer}</div></div><div style={{height:14,borderRadius:999,background:K.cd,border:"1px solid "+K.bd,overflow:"hidden",display:"flex"}}>{segments.map(segment=><div key={segment.label} title={`${segment.label}: ${fmt(segment.value)}`} style={{width:`${Math.max((Math.max(segment.value,0)/base)*100,segment.value>0?2:0)}%`,background:segment.color,opacity:segment.value>0?1:.25,transition:"width .25s ease"}}/>)}</div><div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(2,minmax(0,1fr))",gap:6,marginTop:10}}>{segments.map(segment=><div key={segment.label} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:10}}><span style={{display:"inline-flex",alignItems:"center",gap:6,minWidth:0}}><span style={{width:8,height:8,borderRadius:999,background:segment.color,flex:"0 0 auto"}}/>{segment.label}</span><span style={{fontWeight:700,color:segment.color,whiteSpace:"nowrap"}}>{fmt(segment.value)}</span></div>)}</div></div>)};
 const PennyPanel=({eyebrow="Pennyboy Take",title,body,note,tone=K.ac,action})=>(<div style={{...crd,background:`linear-gradient(135deg,${tone}14,${K.cd})`,border:`1px solid ${tone}30`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:10}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1.2,textTransform:"uppercase",fontWeight:700}}>{eyebrow} {"·"} {PERSONAS[persona]?.icon}</div><div style={{fontSize:24,fontWeight:800,letterSpacing:-.8,color:tone,marginTop:6,lineHeight:1.05}}>{title}</div></div><div style={{padding:"8px 10px",borderRadius:12,background:K.bg,border:"1px solid "+K.bd,fontSize:10,fontWeight:700,color:tone}}>Mascot Logic</div></div><div style={{fontSize:12,color:K.tx,lineHeight:1.7,maxWidth:620}}>{body}</div>{note&&<div style={{marginTop:10,padding:"10px 12px",borderRadius:12,background:K.bg,border:"1px solid "+K.bd,fontSize:10,color:K.mt,lineHeight:1.55}}>{note}</div>}{action&&<div style={{marginTop:10,fontSize:10,color:tone,fontWeight:700}}>{action}</div>}</div>);
 const BreakdownCard=({title,total,tone,rows,empty,footnote})=>(<div style={{padding:12,borderRadius:14,background:K.bg,border:"1px solid "+K.bd}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}><div><div style={{fontSize:10,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{title}</div><div style={{fontSize:18,fontWeight:800,color:tone,marginTop:4}}>{fmt(total)}</div></div><TonePill tone={tone===K.wn?"sub":tone===K.pp?"debt":tone===K.dn?"warn":"fixed"} label={`${rows.length} rows`}/></div>{rows.length===0?<div style={{fontSize:10,color:K.dm,lineHeight:1.55}}>{empty}</div>:<div style={{display:"grid",gap:8}}>{rows.map(row=><div key={row.key} style={{paddingBottom:8,borderBottom:"1px solid "+K.bd}}><div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11}}><span style={{fontWeight:700}}>{row.label}</span><span style={{fontWeight:700,color:tone,whiteSpace:"nowrap"}}>{fmt(row.amount)}</span></div><div style={{fontSize:10,color:K.mt,marginTop:4,lineHeight:1.45}}>{row.detail}</div></div>)}</div>}{footnote&&<div style={{fontSize:10,color:K.mt,marginTop:8,lineHeight:1.5}}>{footnote}</div>}</div>);
@@ -989,14 +1054,62 @@ if(tab==="bud")return(<div>
 <BreakdownCard title="Subscription Run Rate" total={effectiveSubT} tone={K.wn} rows={subscriptionBreakdownRows} empty="No active subscription charges are being counted right now." footnote={recurringBudgetModel.unmatchedSubTotal>0?`${fmt(recurringBudgetModel.unmatchedSubTotal)} still comes directly from the Subscriptions page.`:"All active subscriptions shown here are matched back to visible planner rows."}/>
 <BreakdownCard title="Required Debt Payments" total={loanMinTotal} tone={K.pp} rows={debtBreakdownRows} empty="No active debt minimums are being counted right now." footnote={plannerLoanRows.length?`Planner loan rows: ${plannerLoanRows.map(row=>`${row.label} ${fmt(row.amount)}`).join(" · ")}. These do not control the required minimums.`:"Debt minimums currently come only from the Debt tab."}/>
 </div>}
+<div style={{...crd,marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap",marginBottom:10}}>
+<div>
+<div style={ct}>Where The Plan Crosses Safe Cash</div>
+<div style={{fontSize:11,color:K.mt,lineHeight:1.6,maxWidth:760}}>{allocationCrossSummary}</div>
+</div>
+<div style={{display:"grid",gap:4,textAlign:"right",fontSize:10,minWidth:180}}>
+<div><span style={{color:K.mt}}>Safe cash:</span> <span style={{fontWeight:800,color:K.ac}}>{fmt(availableAfterBills)}</span></div>
+<div><span style={{color:K.mt}}>Expense plan:</span> <span style={{fontWeight:800,color:plannedExpenseBudget<=availableAfterBills?K.bl:K.dn}}>{fmt(plannedExpenseBudget)}</span></div>
+<div><span style={{color:K.mt}}>Allocation goals:</span> <span style={{fontWeight:800,color:K.pp}}>{fmt(plannedAllocationBudget)}</span></div>
+</div>
+</div>
+<div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,minmax(0,1fr))",gap:8,marginBottom:10}}>
+<div style={{padding:10,borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}>
+<div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Expense Plan</div>
+<div style={{fontSize:18,fontWeight:800,color:plannedExpenseBudget<=availableAfterBills?K.bl:K.dn}}>{fmt(plannedExpenseBudget)}</div>
+<div style={{fontSize:10,color:K.mt,marginTop:4,lineHeight:1.45}}>{plannedExpenseBudget<=availableAfterBills?`${fmt(Math.abs(expensePlanSlack))} of safe cash remains before allocation goals.`:`${fmt(Math.abs(expensePlanSlack))} over safe cash before allocations.`}</div>
+</div>
+<div style={{padding:10,borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}>
+<div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Allocation Goals</div>
+<div style={{fontSize:18,fontWeight:800,color:K.pp}}>{fmt(plannedAllocationBudget)}</div>
+<div style={{fontSize:10,color:K.mt,marginTop:4,lineHeight:1.45}}>Savings, Roth, and extra principal live here so you can see whether the overage is a cashflow decision, not a spending mistake.</div>
+</div>
+<div style={{padding:10,borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}>
+<div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>Crosses At</div>
+<div style={{fontSize:18,fontWeight:800,color:firstAllocationCross?K.wn:K.ac}}>{firstAllocationCross?firstAllocationCross.n:"No crossing"}</div>
+<div style={{fontSize:10,color:K.mt,marginTop:4,lineHeight:1.45}}>{firstAllocationCross?`${fmt(firstAllocationCross.cumulative)} cumulative · ${fmt(Math.abs(firstAllocationCross.delta))} past safe cash at that row.`:"Every planned category still fits within this month’s safe cash."}</div>
+</div>
+</div>
+<div style={{display:"grid",gap:8}}>
+{allocationPressureRows.length===0?<div style={{fontSize:10,color:K.dm,lineHeight:1.6}}>No category budgets are set yet.</div>:allocationPressureRows.map(row=>(<div key={row.id} style={{padding:"10px 12px",borderRadius:12,background:row.crosses?(row.type==="allocation"?K.pp+"10":K.dn+"0d"):K.bg,border:"1px solid "+(row.crosses?(row.type==="allocation"?K.pp+"35":K.dn+"35"):K.bd)}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+<span style={{fontSize:14}}>{CI[row.id]}</span>
+<span style={{fontWeight:700,fontSize:11}}>{row.n}</span>
+<TonePill tone={row.type==="allocation"?"alloc":"fixed"} label={row.type==="allocation"?"Allocation":"Expense"}/>
+{row.crosses&&<TonePill tone="warn" label="Past safe line"/>}
+</div>
+<div style={{textAlign:"right"}}>
+<div style={{fontSize:11,fontWeight:800,color:row.crosses?(row.type==="allocation"?K.pp:K.dn):K.tx}}>{fmt(row.b)}</div>
+<div style={{fontSize:10,color:row.crosses?K.dn:K.ac}}>{row.crosses?`${fmt(Math.abs(row.delta))} past safe cash`:`${fmt(Math.abs(row.delta))} before safe line`}</div>
+</div>
+</div>
+<div style={{fontSize:10,color:K.mt,marginBottom:5}}>Cumulative planned budget: <span style={{fontWeight:700,color:K.tx}}>{fmt(row.cumulative)}</span></div>
+<div style={pbr}><div style={pfn((row.cumulative/Math.max(totB,availableAfterBills,1))*100,row.crosses?(row.type==="allocation"?K.pp:K.dn):row.type==="allocation"?K.pp:K.bl)}/></div>
+</div>))}
+</div>
+</div>
 <div style={{display:"grid",gridTemplateColumns:g2,gap:10,marginBottom:12}}>
 <div style={crd}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={ct}>Recurring Bills</div><button onClick={()=>{const d=prompt("Bill name:");const a=prompt("Amount:");if(d&&a)addRecurring(d,a)}} style={btn(false)}><Plus size={10}/>Add</button></div>
 <div style={{fontSize:10,color:K.mt,marginBottom:8}}>Base bills <span style={{fontWeight:700,color:K.tx}}>{fmt(recurringBudgetModel.fixedBaseTotal)}/mo</span> · debt reference rows <span style={{fontWeight:700,color:K.tx}}>{fmt(recurringBudgetModel.loanTotal)}/mo</span> · subscription-linked rows <span style={{fontWeight:700,color:K.tx}}>{fmt(recurringBudgetModel.overlapTotal)}/mo</span></div>
-{recurringRows.map((bill,index)=>{const sourceMeta=recurringRowSource[bill.id]||{tone:"fixed",label:"Fixed-Bill Base",detail:"Counts toward the live fixed-bill base."};return(<div key={bill.id||index} style={{display:"grid",gridTemplateColumns:mob?"1fr":"minmax(0,1.4fr) 110px 70px auto",gap:6,alignItems:"center",padding:"8px 0",borderBottom:"1px solid "+K.bd}}><div><input value={bill.desc} onChange={e=>editRecurring(index,"desc",e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11}}/><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:5}}><TonePill tone={sourceMeta.tone} label={sourceMeta.label}/><span style={{fontSize:9,color:K.mt,lineHeight:1.45}}>{sourceMeta.detail}</span></div></div><input type="number" value={bill.amt} onChange={e=>editRecurring(index,"amt",e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11}}/><input type="number" value={bill.day||1} onChange={e=>editRecurring(index,"day",e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11}}/><button onClick={()=>removeRecurring(index)} style={{...btn(false),color:K.dn,justifyContent:"center"}}><X size={10}/></button></div>)})}
+{recurringRows.map((bill,index)=>{const sourceMeta=recurringRowSource[bill.id]||{tone:"fixed",label:"Fixed-Bill Base",detail:"Counts toward the live fixed-bill base."};return(<div key={bill.id||index} style={{display:"grid",gridTemplateColumns:mob?"1fr":"minmax(0,1.4fr) 110px 70px auto",gap:6,alignItems:"center",padding:"8px 0",borderBottom:"1px solid "+K.bd}}><div><input value={bill.desc} onChange={e=>editRecurring(index,"desc",e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11}}/><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:5}}><TonePill tone={sourceMeta.tone} label={sourceMeta.label}/><span style={{fontSize:9,color:K.mt,lineHeight:1.45}}>{sourceMeta.detail}</span></div></div><input type="text" inputMode="decimal" value={recurringDraftValue(bill,"amt")} onChange={e=>setRecurringDraftValue(bill.id,"amt",e.target.value)} onBlur={()=>commitRecurringDraft(index,bill,"amt")} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitRecurringDraft(index,bill,"amt");e.currentTarget.blur()}if(e.key==="Escape"){e.preventDefault();clearRecurringDraftValue(bill.id,"amt");e.currentTarget.blur()}}} style={{...inp,padding:"5px 8px",fontSize:11}}/><input type="text" inputMode="numeric" value={recurringDraftValue(bill,"day")} onChange={e=>setRecurringDraftValue(bill.id,"day",e.target.value)} onBlur={()=>commitRecurringDraft(index,bill,"day")} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commitRecurringDraft(index,bill,"day");e.currentTarget.blur()}if(e.key==="Escape"){e.preventDefault();clearRecurringDraftValue(bill.id,"day");e.currentTarget.blur()}}} style={{...inp,padding:"5px 8px",fontSize:11}}/><button onClick={()=>removeRecurring(index)} style={{...btn(false),color:K.dn,justifyContent:"center"}}><X size={10}/></button></div>)})}
 </div>
 <div style={crd}><div style={ct}>Recurring Candidates</div>{recurDet.length===0?<div style={{fontSize:10,color:K.dm,lineHeight:1.6}}>Pennyboy needs at least two months of transactions before he starts calling something recurring with a straight face.</div>:recurDet.slice(0,5).map(item=>(<div key={item.desc+item.card} style={{padding:"8px 0",borderBottom:"1px solid "+K.bd}}><div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11}}><span style={{fontWeight:700}}>{item.desc}</span><span style={{color:K.mt}}>~{fmt(item.avg)}</span></div><div style={{fontSize:10,color:K.mt,marginTop:4}}>Confidence {item.confidence}% · {item.count} hits · latest {item.latest}</div><div style={{display:"flex",gap:6,marginTop:6}}><button onClick={()=>addRecurring(item.desc,item.avg,item.cat,item.card)} style={btn(false)}><Repeat size={10}/>As Bill</button><button onClick={()=>setSubs(prev=>[...prev,normalizeSub({n:item.desc,a:+item.avg,cat:item.cat||"Other",card:cMap[item.card]||item.card,account:cMap[item.card]||item.card,cycle:"monthly",day:1,st:"active"})])} style={btn(false)}><Plus size={10}/>As Sub</button></div></div>))}</div>
 </div>
-<div style={crd}>{cats.map(c=>{const spent=byCat[c.id]||0;const prevSpent=prevByCat[c.id]||0;const p=c.b?(spent/c.b)*100:0;const over=p>100;const left=c.b-spent;return(<div key={c.id} style={{padding:"10px 0",borderBottom:"1px solid "+K.bd}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:8}}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>{CI[c.id]}</span><div><div style={{fontWeight:600,fontSize:12}}>{c.n}</div><div style={{fontSize:10,color:K.mt}}>{compareLabel}{cmpMode&&prevMK?` · prev ${fmt(prevSpent)}`:""} <button onClick={()=>{const nv=prompt(`${c.n} budget:`,c.b);if(nv)setCats(list=>list.map(item=>item.id===c.id?{...item,b:+nv}:item))}} style={{background:"none",border:"none",color:K.dm,cursor:"pointer"}}><Edit3 size={9}/></button></div></div></div><div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:12,color:over?K.dn:K.tx}}>{fmt(spent)} / {fmt(c.b)}</div><div style={{fontSize:10,color:left>=0?K.ac:K.dn}}>{left>=0?fmt(left)+" left":fmt(Math.abs(left))+" over"}</div></div></div><div style={pbr}><div style={pfn(p,over?K.dn:p>80?K.wn:K.ac)}/></div>{cmpMode&&prevMK&&<div style={{fontSize:9,color:K.dm,marginTop:4}}>{mo} {fmt(spent)} vs {prevMK} {fmt(prevSpent)} {prevSpent?`(${pct(spent,prevSpent).toFixed(1)}%)`:""}</div>}</div>)})}</div></div>);
+<div style={crd}>{cats.map(c=>{const spent=byCat[c.id]||0;const prevSpent=prevByCat[c.id]||0;const p=c.b?(spent/c.b)*100:0;const over=p>100;const left=c.b-spent;const planMeta=allocationPressureMap[c.id];return(<div key={c.id} style={{padding:"10px 0",borderBottom:"1px solid "+K.bd}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,gap:8}}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:14}}>{CI[c.id]}</span><div><div style={{fontWeight:600,fontSize:12}}>{c.n}</div><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:4}}>{planMeta&&<TonePill tone={planMeta.type==="allocation"?"alloc":"fixed"} label={planMeta.type==="allocation"?"Allocation":"Expense"}/>} {planMeta?.crosses&&<TonePill tone="warn" label="Past safe line"/>} <span style={{fontSize:10,color:K.mt}}>{planMeta?`Cumulative ${fmt(planMeta.cumulative)} · ${planMeta.crosses?fmt(Math.abs(planMeta.delta))+" past safe":fmt(Math.abs(planMeta.delta))+" below safe"}`:compareLabel}</span> <button onClick={()=>{const nv=prompt(`${c.n} budget:`,c.b);if(nv)setCats(list=>list.map(item=>item.id===c.id?{...item,b:+nv}:item))}} style={{background:"none",border:"none",color:K.dm,cursor:"pointer"}}><Edit3 size={9}/></button></div>{cmpMode&&prevMK&&<div style={{fontSize:9,color:K.dm,marginTop:4}}>{mo} {fmt(spent)} vs {prevMK} {fmt(prevSpent)} {prevSpent?`(${pct(spent,prevSpent).toFixed(1)}%)`:""}</div>}</div></div><div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:12,color:over?K.dn:K.tx}}>{fmt(spent)} / {fmt(c.b)}</div><div style={{fontSize:10,color:left>=0?K.ac:K.dn}}>{left>=0?fmt(left)+" left":fmt(Math.abs(left))+" over"}</div></div></div><div style={pbr}><div style={pfn(p,over?K.dn:p>80?K.wn:K.ac)}/></div></div>)})}</div></div>);
 
 if(tab==="debt")return(<div>
 <div style={{marginBottom:12}}><div style={{fontSize:18,fontWeight:700}}>Debt Tracker</div></div>
