@@ -131,6 +131,18 @@ const monthKeyFromDateStr=value=>{
   return mKey(dt);
 };
 const normalizeMerchant=desc=>(desc||"").toLowerCase().replace(/\b(pending|debit|purchase|pos|card|transaction|store|online)\b/g," ").replace(/\d+/g," ").replace(/[^\w\s]/g," ").replace(/\s+/g," ").trim();
+const merchantMatch=(left,right)=>{
+  const a=normalizeMerchant(left);
+  const b=normalizeMerchant(right);
+  if(!a||!b)return false;
+  return a===b||a.includes(b)||b.includes(a);
+};
+const amountClose=(left,right)=>{
+  const a=Math.abs(Number(left)||0);
+  const b=Math.abs(Number(right)||0);
+  if(!a||!b)return false;
+  return Math.abs(a-b)<=Math.max(3,Math.min(a,b)*0.25);
+};
 const moneyNum=value=>{
   if(value==null)return 0;
   const raw=String(value).trim();
@@ -548,25 +560,55 @@ const prevByCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);prevTxns.forE
 const heatOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]),MO.indexOf(p[0]),1).getDay()+6)%7},[mo]);
 const moDay=mo===curMK?td:dim;
 const moSparse=mo===curMK&&moDay<=7&&txns.length<5;
-const loanMinTotal=debts.filter(d=>d.bal>0&&d.minP).reduce((s,d)=>s+(d.minP||0),0);
 const recurringRows=useMemo(()=>cloneRecurring(recurring||FBILLS),[recurring]);
-const recurringFixedTotal=recurringRows.filter(item=>item.cat!=="loan").reduce((sum,item)=>sum+item.amt,0);
-const effectiveFixed=Math.max(cur.fix,recurringFixedTotal);
+const recurringBudgetModel=useMemo(()=>{
+  const activeSubs=subRows.filter(sub=>sub.st==="active");
+  const usedSubs=new Set();
+  const overlap=[];
+  const overlapIds=new Set();
+  recurringRows.filter(item=>item.cat!=="loan").forEach(item=>{
+    const matchIndex=activeSubs.findIndex((sub,index)=>!usedSubs.has(index)&&merchantMatch(item.desc,sub.n)&&amountClose(item.amt,sub.monthlyEquivalent||sub.a));
+    if(matchIndex>=0){
+      usedSubs.add(matchIndex);
+      overlap.push({recurring:item,sub:activeSubs[matchIndex]});
+      overlapIds.add(item.id);
+    }
+  });
+  const loanRows=recurringRows.filter(item=>item.cat==="loan");
+  const fixedBaseRows=recurringRows.filter(item=>item.cat!=="loan"&&!overlapIds.has(item.id));
+  return{
+    loanRows,
+    loanTotal:loanRows.reduce((sum,item)=>sum+item.amt,0),
+    overlap,
+    overlapTotal:overlap.reduce((sum,match)=>sum+match.recurring.amt,0),
+    fixedBaseRows,
+    fixedBaseTotal:fixedBaseRows.reduce((sum,item)=>sum+item.amt,0)
+  };
+},[recurringRows,subRows]);
+const loanMinTotal=debts.filter(d=>d.bal>0&&d.minP).reduce((s,d)=>s+(d.minP||0),0);
+const normalizeFixedBaseAmount=rawFix=>{
+  const fix=Math.abs(Number(rawFix)||0);
+  if(!(recurringBudgetModel.loanTotal||recurringBudgetModel.overlapTotal||recurringBudgetModel.fixedBaseTotal))return fix;
+  const normalized=Math.max(0,fix-recurringBudgetModel.loanTotal-recurringBudgetModel.overlapTotal);
+  return Math.max(normalized,recurringBudgetModel.fixedBaseTotal);
+};
+const effectiveFixedBase=normalizeFixedBaseAmount(cur.fix);
+const legacyFixedAdjustment=Math.max(0,(Number(cur.fix)||0)-effectiveFixedBase);
 const currentSideIncome=monthlySideIncome[mo]||0;
-const availableAfterBills=cur.inc+currentSideIncome-effectiveFixed-loanMinTotal-subT;
+const availableAfterBills=cur.inc+currentSideIncome-effectiveFixedBase-loanMinTotal-subT;
 const budgetGap=availableAfterBills-totB;
 const blankCsvStarter=activeUser==="sarah"&&allTxnCount===0&&totalDebt===0&&subs.length===0&&sideInc.length===0&&![bal.sav,bal.ira,bal.stk,bal.jnt,bal.inc,bal.fix].some(Boolean);
 const holdings=activeUser==="greg"?DEMO_HOLDINGS:[];
 const debtBase=activeUser==="greg"?31241:Math.max(totalDebt,0);
 const compareLabel=prevMK?`${mo} vs ${prevMK}`:`${mo} only`;
 
-const savRate=(cur.inc+currentSideIncome)>0?((cur.inc+currentSideIncome-effectiveFixed-loanMinTotal-subT-totS)/(cur.inc+currentSideIncome)*100):0;
-const savHist=histSeries.map(h=>{const extra=monthlySideIncome[h.m]||0;return{name:h.m,rate:(h.inc+extra)>0?((h.inc+extra-Math.max(h.fix,recurringFixedTotal)-h.spend)/(h.inc+extra)*100):0};});
+const savRate=(cur.inc+currentSideIncome)>0?((cur.inc+currentSideIncome-effectiveFixedBase-loanMinTotal-subT-totS)/(cur.inc+currentSideIncome)*100):0;
+const savHist=histSeries.map(h=>{const extra=monthlySideIncome[h.m]||0;const fixedBase=normalizeFixedBaseAmount(h.fix);return{name:h.m,rate:(h.inc+extra)>0?((h.inc+extra-fixedBase-loanMinTotal-subT-h.spend)/(h.inc+extra)*100):0};});
 const euroT=8000;const euroS=2400;const euroDate=new Date(2026,7,1);
 const euroDays=Math.max(0,Math.ceil((euroDate-now)/(86400000)));
 const euroMo=Math.max(1,Math.ceil(euroDays/30));const euroPM=(euroT-euroS)/euroMo;
 const sideIncT=sideInc.reduce((s,x)=>s+x.amt,0);
-const remaining=cur.inc+currentSideIncome-effectiveFixed;const budOver=totB-availableAfterBills;
+const remaining=cur.inc+currentSideIncome-effectiveFixedBase;const budOver=totB-availableAfterBills;
 
 const wiData=useMemo(()=>{
 const aiCost=subRows.filter(s=>s.cat==="AI"&&s.st==="active").reduce((s,x)=>s+x.monthlyEquivalent,0);
@@ -626,7 +668,7 @@ const sendAI=async()=>{if(!aiMsg.trim())return;const um=aiMsg.trim();setAiChat(p
 const bCtx=cats.map(c=>`${c.n}:$${(byCat[c.id]||0).toFixed(0)}/$${c.b}`).join(", ");
 const pPr={pro:"Professional financial advisor.",unhinged:"UNHINGED financial advisor. Roast spending. Caps lock. Drag them.",dark:"Financial advisor with dark humor. Deadpan gallows comedy.",therapist:"Financial therapist. Passive-aggressive. Ask how spending makes them feel.",hype:"HYPE BEAST advisor. Everything amazing. Celebrate even bad decisions."};
 const moCtx=moSparse?`NOTE: It is ${MO[now.getMonth()]} ${moDay} - only ${txns.length} transactions this month. Data below is from LAST month (${prevMK||"N/A"}) for meaningful analysis. Remind user it is early in the month.`:`Current month: ${mo}, day ${moDay} of ${dim}, ${txns.length} transactions logged.`;
-const sys=aiSysP||`${pPr[persona]||pPr.pro} ${moCtx} Advisor for ${USERS.find(u=>u.id===activeUser)?.name||"the user"}. Direct, specific. Under 200 words.\nIncome $${cur.inc}/mo | Fixed $${cur.fix} | Budget: ${bCtx} | Spent $${totS.toFixed(0)}/$${totB} | Savings rate ${savRate.toFixed(1)}%\nDEBT: $${cur.loans} | Active: ${debts.filter(d=>d.bal>0).map(d=>`${d.n} $${d.bal}`).join(", ")||"None"}\nASSETS: Sav $${cur.sav} | IRA $${cur.ira} | Stk $${cur.stk} | Joint $${cur.jnt} | NW $${nw.toFixed(0)}\nSubs $${subT.toFixed(0)}/mo | GOALS: ${goals.length?goals.map(g=>g.name).join(", "):"No goals yet"}`;
+const sys=aiSysP||`${pPr[persona]||pPr.pro} ${moCtx} Advisor for ${USERS.find(u=>u.id===activeUser)?.name||"the user"}. Direct, specific. Under 200 words.\nIncome $${cur.inc}/mo | Fixed base $${effectiveFixedBase.toFixed(0)} | Subs $${subT.toFixed(0)} | Loan minimums $${loanMinTotal.toFixed(0)} | Budget: ${bCtx} | Spent $${totS.toFixed(0)}/$${totB} | Savings rate ${savRate.toFixed(1)}%\nDEBT: $${cur.loans} | Active: ${debts.filter(d=>d.bal>0).map(d=>`${d.n} $${d.bal}`).join(", ")||"None"}\nASSETS: Sav $${cur.sav} | IRA $${cur.ira} | Stk $${cur.stk} | Joint $${cur.jnt} | NW $${nw.toFixed(0)}\nGOALS: ${goals.length?goals.map(g=>g.name).join(", "):"No goals yet"}`;
 try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey.trim(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:aiModel,max_tokens:1000,system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}]})});
 const data=await res.json();if(!res.ok)throw new Error(data?.error?.message||"Request failed");setAiChat(p=>[...p,{role:"ai",text:data.content?.map(c=>c.text||"").join("")||"No response."}])}catch(e){setAiChat(p=>[...p,{role:"ai",text:e?.message||"Error. Check Settings > API Key."}])}setAiLoad(false)};
 
@@ -756,7 +798,7 @@ if(tab==="dash")return(<div>
 <div style={{fontSize:12,color:K.mt,marginTop:6}}>{todayStr} {"·"} {now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})} {"·"} {mo}</div>
 <div style={{fontSize:12,color:K.mt,marginTop:8,maxWidth:560,lineHeight:1.55}}>{blankCsvStarter?"Sarah starts blank on purpose. Bring in a bank CSV first, then shape budgets, balances, debts, and goals off real data.":"A clearer month-at-a-glance view: what is left after fixed costs, what is already spent, and whether this month still supports your bigger goals."}</div>
 <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,minmax(0,1fr))",gap:8,marginTop:14}}>
-{[{l:"After Bills",v:fmt(availableAfterBills),sub:`${fmt(cur.fix)} fixed + ${fmt(loanMinTotal)} loans`,c:K.ac},{l:"Spent So Far",v:fmt(totS),sub:`Projected ${fmt(projT)}`,c:totS>availableAfterBills?K.dn:K.bl},{l:"Budget Gap",v:budgetGap>=0?fmt(budgetGap):fmt(budgetGap),sub:budgetGap>=0?"Budget fits":"Budget too aggressive",c:budgetGap>=0?K.ac:K.dn},{l:"Europe Pace",v:fmt(euroPM),sub:`Need / month · ${euroDays}d left`,c:K.pp}].map((x,i)=>(<div key={i} style={{padding:"10px 11px",borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}><div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:5}}>{x.l}</div><div style={{fontSize:18,fontWeight:800,letterSpacing:-.6,color:x.c}}>{x.v}</div><div style={{fontSize:9,color:K.mt,marginTop:3,lineHeight:1.45}}>{x.sub}</div></div>))}
+{[{l:"After Bills",v:fmt(availableAfterBills),sub:`${fmt(effectiveFixedBase)} fixed + ${fmt(subT)} subs + ${fmt(loanMinTotal)} loans`,c:K.ac},{l:"Spent So Far",v:fmt(totS),sub:`Projected ${fmt(projT)}`,c:totS>availableAfterBills?K.dn:K.bl},{l:"Budget Gap",v:budgetGap>=0?fmt(budgetGap):fmt(budgetGap),sub:budgetGap>=0?"Budget fits":"Budget too aggressive",c:budgetGap>=0?K.ac:K.dn},{l:"Europe Pace",v:fmt(euroPM),sub:`Need / month · ${euroDays}d left`,c:K.pp}].map((x,i)=>(<div key={i} style={{padding:"10px 11px",borderRadius:12,background:K.bg,border:"1px solid "+K.bd}}><div style={{fontSize:9,color:K.dm,letterSpacing:1,textTransform:"uppercase",fontWeight:700,marginBottom:5}}>{x.l}</div><div style={{fontSize:18,fontWeight:800,letterSpacing:-.6,color:x.c}}>{x.v}</div><div style={{fontSize:9,color:K.mt,marginTop:3,lineHeight:1.45}}>{x.sub}</div></div>))}
 </div>
 </div>
 </div>
@@ -817,8 +859,8 @@ if(tab==="txn")return(<div>
 if(tab==="bud")return(<div>
 <div style={{marginBottom:12}}><div style={{fontSize:18,fontWeight:700}}>Budget Truth Source</div><div style={{fontSize:11,color:K.mt,marginTop:3}}>{compareLabel}. This page now treats locked fixed bills, recurring bills, subscriptions, and loan minimums as separate layers before the category budget.</div></div>
 <div style={{...crd,marginBottom:12,background:`linear-gradient(135deg,${K.ac}08,${K.cd})`}}><div style={{display:"grid",gap:4}}>
-{[{l:"Gross Income",v:cur.inc,c:K.ac},{l:"+ Side Income This Month",v:currentSideIncome,c:K.bl},{l:"− Locked Fixed Base",v:-effectiveFixed,c:K.dn},{l:"− Subscription Run Rate",v:-subT,c:K.wn},{l:"− Loan Minimums",v:-loanMinTotal,c:K.pp},{l:"= Safe To Budget",v:availableAfterBills,c:availableAfterBills>=0?K.ac:K.dn,bold:true},{l:"Budgeted Across Categories",v:totB,c:K.bl},{l:"Spent So Far",v:totS,c:K.dn},{l:"= Discretionary Left",v:availableAfterBills-totS,c:(availableAfterBills-totS)>=0?K.ac:K.dn,bold:true}].map(row=>(<div key={row.l} style={{display:"flex",justifyContent:"space-between",padding:"6px 8px",background:row.bold?K.bg:"transparent",borderRadius:row.bold?8:0,fontWeight:row.bold?700:500}}><span style={{fontSize:11,color:row.bold?K.tx:K.mt}}>{row.l}</span><span style={{fontSize:12,fontWeight:700,color:row.c}}>{fmt(row.v)}</span></div>))}
-{Math.abs(cur.fix-recurringFixedTotal)>1&&<div style={{padding:"8px 10px",borderRadius:8,background:K.bg,border:"1px solid "+K.bd,fontSize:10,color:K.mt,lineHeight:1.5}}>Locked fixed base is {fmt(cur.fix)} while recurring planner totals {fmt(recurringFixedTotal)}. Coinspire uses the higher number so the budget stays conservative.</div>}
+{[{l:"Gross Income",v:cur.inc,c:K.ac},{l:"+ Side Income This Month",v:currentSideIncome,c:K.bl},{l:"− Locked Fixed Base",v:-effectiveFixedBase,c:K.dn},{l:"− Subscription Run Rate",v:-subT,c:K.wn},{l:"− Loan Minimums",v:-loanMinTotal,c:K.pp},{l:"= Safe To Budget",v:availableAfterBills,c:availableAfterBills>=0?K.ac:K.dn,bold:true},{l:"Budgeted Across Categories",v:totB,c:K.bl},{l:"Spent So Far",v:totS,c:K.dn},{l:"= Discretionary Left",v:availableAfterBills-totS,c:(availableAfterBills-totS)>=0?K.ac:K.dn,bold:true}].map(row=>(<div key={row.l} style={{display:"flex",justifyContent:"space-between",padding:"6px 8px",background:row.bold?K.bg:"transparent",borderRadius:row.bold?8:0,fontWeight:row.bold?700:500}}><span style={{fontSize:11,color:row.bold?K.tx:K.mt}}>{row.l}</span><span style={{fontSize:12,fontWeight:700,color:row.c}}>{fmt(row.v)}</span></div>))}
+{legacyFixedAdjustment>1&&<div style={{padding:"8px 10px",borderRadius:8,background:K.bg,border:"1px solid "+K.bd,fontSize:10,color:K.mt,lineHeight:1.5}}>Locked fixed input is {fmt(cur.fix)}, but {fmt(recurringBudgetModel.overlapTotal)} of it already lives in subscriptions and {fmt(recurringBudgetModel.loanTotal)} belongs in loan payments. Coinspire normalizes the fixed base to {fmt(effectiveFixedBase)} so the waterfall does not double-count.</div>}
 {budOver>0&&<div style={{padding:"6px 8px",fontSize:10,color:K.dn,background:K.dd,borderRadius:8}}>Category budgets are still {fmt(budOver)} above what is safe after fixed costs.</div>}
 </div></div>
 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(4,1fr)",gap:10,marginBottom:12}}>
@@ -829,7 +871,7 @@ if(tab==="bud")return(<div>
 </div>
 <div style={{display:"grid",gridTemplateColumns:g2,gap:10,marginBottom:12}}>
 <div style={crd}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={ct}>Recurring Bills</div><button onClick={()=>{const d=prompt("Bill name:");const a=prompt("Amount:");if(d&&a)addRecurring(d,a)}} style={btn(false)}><Plus size={10}/>Add</button></div>
-<div style={{fontSize:10,color:K.mt,marginBottom:8}}>Planner total: <span style={{fontWeight:700,color:K.tx}}>{fmt(recurringRows.reduce((sum,item)=>sum+item.amt,0))}/mo</span></div>
+<div style={{fontSize:10,color:K.mt,marginBottom:8}}>Base bills <span style={{fontWeight:700,color:K.tx}}>{fmt(recurringBudgetModel.fixedBaseTotal)}/mo</span> · loan rows <span style={{fontWeight:700,color:K.tx}}>{fmt(recurringBudgetModel.loanTotal)}/mo</span> · sub overlaps removed <span style={{fontWeight:700,color:K.tx}}>{fmt(recurringBudgetModel.overlapTotal)}/mo</span></div>
 {recurringRows.map((bill,index)=>(<div key={bill.id||index} style={{display:"grid",gridTemplateColumns:mob?"1fr":"minmax(0,1.4fr) 110px 70px auto",gap:6,alignItems:"center",padding:"6px 0",borderBottom:"1px solid "+K.bd}}><input value={bill.desc} onChange={e=>editRecurring(index,"desc",e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11}}/><input type="number" value={bill.amt} onChange={e=>editRecurring(index,"amt",e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11}}/><input type="number" value={bill.day||1} onChange={e=>editRecurring(index,"day",e.target.value)} style={{...inp,padding:"5px 8px",fontSize:11}}/><button onClick={()=>removeRecurring(index)} style={{...btn(false),color:K.dn,justifyContent:"center"}}><X size={10}/></button></div>))}
 </div>
 <div style={crd}><div style={ct}>Recurring Candidates</div>{recurDet.length===0?<div style={{fontSize:10,color:K.dm}}>Import more than one month of transactions to surface recurring patterns.</div>:recurDet.slice(0,5).map(item=>(<div key={item.desc+item.card} style={{padding:"8px 0",borderBottom:"1px solid "+K.bd}}><div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11}}><span style={{fontWeight:700}}>{item.desc}</span><span style={{color:K.mt}}>~{fmt(item.avg)}</span></div><div style={{fontSize:10,color:K.mt,marginTop:4}}>Confidence {item.confidence}% · {item.count} hits · latest {item.latest}</div><div style={{display:"flex",gap:6,marginTop:6}}><button onClick={()=>addRecurring(item.desc,item.avg,item.cat,item.card)} style={btn(false)}><Repeat size={10}/>As Bill</button><button onClick={()=>setSubs(prev=>[...prev,normalizeSub({n:item.desc,a:+item.avg,cat:item.cat||"Other",card:cMap[item.card]||item.card,account:cMap[item.card]||item.card,cycle:"monthly",day:1,st:"active"})])} style={btn(false)}><Plus size={10}/>As Sub</button></div></div>))}</div>
