@@ -852,47 +852,90 @@ return(<div key={d} style={{marginBottom:10}}>
 </div>)}
 
 function DebtPage({T,debts,setDebts}){
-const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal===0&&d.status==="paid");
+const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal<=0||d.status==="paid");
 const totalDebt=active.reduce((s,d)=>s+(d.bal||0),0);
-const payoffs=active.filter(d=>d.minPay>0).map(d=>{const pay=d.minPay;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
-while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:Math.max(0,rem)});rem-=pay;m++;dt.setMonth(dt.getMonth()+1)}
-if(rem<=0)pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:0});
+const totalMonthly=active.reduce((s,d)=>s+(d.minPay||0),0);
+const[editId,setEditId]=useState(null);const[ef,setEf]=useState({});
+
+const startEdit=(d)=>{setEditId(d.id);setEf({name:d.name,bal:d.bal,rate:d.rate||0,minPay:d.minPay||0,note:d.note||""})};
+const saveDebtEdit=()=>{setDebts(p=>p.map(d=>d.id===editId?{...d,name:ef.name,bal:+ef.bal,rate:+ef.rate,minPay:+ef.minPay,note:ef.note}:d));setEditId(null)};
+
+const payoffs=active.filter(d=>(d.minPay||0)>0).map(d=>{const pay=d.minPay;const r=d.rate/100/12;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
+while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:Math.max(0,rem)});const interest=rem*r;rem=rem+interest-pay;m++;dt.setMonth(dt.getMonth()+1)}
+pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:0});
 return{...d,pts,freeDate:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,months:m}});
+
+// Combined forecast chart
+const maxMonths=Math.max(...payoffs.map(p=>p.months),12);
+const combined=Array.from({length:Math.min(maxMonths+1,60)},(_,i)=>{const dt=new Date();dt.setMonth(dt.getMonth()+i);
+const label=`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`;
+let total=0;active.forEach(d=>{if((d.minPay||0)>0){const r=d.rate/100/12;let rem=d.bal;for(let j=0;j<i;j++){rem=rem+rem*r-d.minPay;if(rem<=0){rem=0;break}}total+=Math.max(0,rem)}else{total+=d.bal}});
+return{mo:label,debt:Math.round(total)}});
+
 return(<div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:14}}>
-<StatCard title="Total Debt" value={fmt(totalDebt)} icon={CreditCard} color={T.warn} T={T}/>
-<StatCard title="Debts Paid" value={`${paid.length}/${debts.length}`} icon={Check} color={T.success} T={T}/>
-<StatCard title="Monthly Payments" value={fmt(active.reduce((s,d)=>s+(d.minPay||0),0))} icon={Calendar} color={T.info} T={T}/></div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14}}>
+<StatCard title="Total Debt" value={fmt(totalDebt)} icon={CreditCard} color={totalDebt>0?T.warn:T.success} T={T}/>
+<StatCard title="Eliminated" value={`${paid.length}/${debts.length}`} icon={Check} color={T.success} T={T} subtitle={`${active.length} remaining`}/>
+<StatCard title="Monthly" value={fmt(totalMonthly)} icon={Calendar} color={T.info} T={T}/></div>
+
+{combined.length>1&&<div style={{...glass(T),marginBottom:14}}>
+<div style={lbl(T)}>Total Debt Forecast</div>
+<ResponsiveContainer width="100%" height={180}>
+<AreaChart data={combined}><defs><linearGradient id="dfg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient></defs>
+<CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+<XAxis dataKey="mo" tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} interval={Math.max(1,Math.floor(combined.length/8))}/>
+<YAxis tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(1)}k`}/>
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v),"Debt"]}/>
+<Area type="monotone" dataKey="debt" stroke={T.warn} strokeWidth={2} fill="url(#dfg)"/></AreaChart></ResponsiveContainer></div>}
+
 {payoffs.map(d=>(
 <div key={d.id} style={{...glass(T),marginBottom:12}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
 <div><div style={{fontSize:15,fontWeight:700}}>{d.name}</div>
-<div style={{fontSize:11,color:T.textDim}}>{d.rate}% APR • {fmt(d.minPay)}/mo • {d.note||""}</div></div>
+<div style={{fontSize:11,color:T.textDim}}>{d.rate}% APR • {fmt(d.minPay)}/mo{d.note?` • ${d.note}`:""}</div></div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
 <div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</div>
-<div style={pill(T.infoBg,T.info)}>Free by {d.freeDate}</div></div></div>
-<ResponsiveContainer width="100%" height={120}>
+<div style={pill(T.infoBg,T.info)}>Free {d.freeDate} ({d.months}mo)</div></div>
+<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button></div></div>
+<ResponsiveContainer width="100%" height={100}>
 <AreaChart data={d.pts}><defs><linearGradient id={`dg${d.id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient></defs>
 <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
 <XAxis dataKey="mo" tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} interval={Math.floor(d.pts.length/5)}/>
 <YAxis tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(1)}k`}/>
-<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v),"Balance"]}/>
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v),"Remaining"]}/>
 <Area type="monotone" dataKey="rem" stroke={T.warn} strokeWidth={2} fill={`url(#dg${d.id})`}/></AreaChart></ResponsiveContainer></div>))}
-{paid.length>0&&<div style={glass(T)}>
-<div style={lbl(T)}>Eliminated 💀</div>
-<div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-{paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name}</div>)}</div></div>}
+
 {active.filter(d=>!d.minPay||d.minPay===0).length>0&&<div style={glass(T)}>
 <div style={lbl(T)}>On Hold ⏸️</div>
-{active.filter(d=>!d.minPay||d.minPay===0).map(d=><div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
-<div><span style={{fontWeight:600}}>{d.name}</span><span style={{fontSize:10,color:T.textDim,marginLeft:8}}>{d.note||"No payments"}</span></div>
-<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</span></div>)}</div>}
+{active.filter(d=>!d.minPay||d.minPay===0).map((d,i,arr)=><div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+<div style={{flex:1}}>
+<div style={{fontSize:13,fontWeight:600}}>{d.name||"Unknown"}</div>
+<div style={{fontSize:10,color:T.textDim}}>{d.rate?d.rate+"% APR • ":""}No active payments{d.note?` • ${d.note}`:""}</div></div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn,fontSize:16}}>{fmt(d.bal)}</span>
+<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button></div></div>)}</div>}
+
+{paid.length>0&&<div style={{...glass(T),marginTop:14}}>
+<div style={lbl(T)}>Eliminated 💀</div>
+<div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+{paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name||d.id}</div>)}</div></div>}
+
+{editId&&<Modal onClose={()=>setEditId(null)} T={T}>
+<div style={{fontSize:16,fontWeight:700,marginBottom:14}}>Edit Debt</div>
+<div style={{display:"grid",gap:10}}>
+{[{k:"name",l:"Name",t:"text"},{k:"bal",l:"Balance",t:"number"},{k:"rate",l:"APR %",t:"number"},{k:"minPay",l:"Monthly Payment",t:"number"},{k:"note",l:"Note",t:"text"}].map(f=>(
+<div key={f.k}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>{f.l}</div>
+<input type={f.t} value={ef[f.k]||""} onChange={e=>setEf(p=>({...p,[f.k]:e.target.value}))} style={{...inpS(T),fontSize:13,padding:"8px 12px"}}/></div>))}
+<button onClick={saveDebtEdit} style={{...btnS(T,true),justifyContent:"center"}}><Check size={12}/>Save</button></div></Modal>}
 </div>)}
 
-function SplitsPage({T,recurring,subs,splits,setSplits,customSplits,setCustomSplits,recurringSplits,setRecurringSplits,mo,billsPaid}){
+function SplitsPage({T,recurring,subs,splits,setSplits,customSplits,setCustomSplits,recurringSplits,setRecurringSplits,mo,billsPaid,billActuals}){
+const moActuals=billActuals?.[mo]||{};
 const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,desc:r.desc,amt:r.amt,cat:r.cat,type:"bill"})),
 ...subs.filter(s=>s.st==="active").map((s,i)=>({id:`s_${i}`,desc:s.n,amt:s.a,cat:s.cat,type:"sub"}))];
 const moSplits=splits[mo]||{};
 const splitBills=allBills.filter(b=>moSplits[b.id]&&moSplits[b.id].confirmed);
+const getBillAmt=(b)=>moActuals[b.id]!=null?moActuals[b.id]:b.amt;
 
 // Custom one-off splits for this month
 const moCustom=customSplits[mo]||[];
@@ -901,19 +944,19 @@ const moCustom=customSplits[mo]||[];
 const moRecurring=recurringSplits.map((r,i)=>{const existing=moCustom.find(c=>c.recurId===r.id);return existing||{id:`rec_${r.id}_${mo}`,recurId:r.id,desc:r.desc,amt:r.amt,sarahAmt:r.amt*((r.pct||50)/100),gregAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}}).filter(r=>!moCustom.find(c=>c.recurId===r.recurId));
 const allCustom=[...moCustom,...moRecurring];
 
-// Totals across all sources
-const billSarah=splitBills.reduce((s,b)=>s+b.amt*(moSplits[b.id].pct/100),0);
+// Totals across all sources - use actual bill amount, not allocation
+const billSarah=splitBills.reduce((s,b)=>s+getBillAmt(b)*(moSplits[b.id].pct/100),0);
 const customSarah=allCustom.reduce((s,c)=>s+c.sarahAmt,0);
 const totalSarah=billSarah+customSarah;
-const billGreg=splitBills.reduce((s,b)=>s+b.amt*(1-moSplits[b.id].pct/100),0);
+const billGreg=splitBills.reduce((s,b)=>s+getBillAmt(b)*(1-moSplits[b.id].pct/100),0);
 const customGreg=allCustom.reduce((s,c)=>s+c.gregAmt,0);
 const totalGreg=billGreg+customGreg;
 
-const billSettled=splitBills.filter(b=>moSplits[b.id].settled).reduce((s,b)=>s+b.amt*(moSplits[b.id].pct/100),0);
+const billSettled=splitBills.filter(b=>moSplits[b.id].settled).reduce((s,b)=>s+getBillAmt(b)*(moSplits[b.id].pct/100),0);
 const customSettled=allCustom.filter(c=>c.settled).reduce((s,c)=>s+c.sarahAmt,0);
 const totalSettled=billSettled+customSettled;
 const unsettled=totalSarah-totalSettled;
-const allItems=[...splitBills.map(b=>({...b,sarahAmt:b.amt*(moSplits[b.id].pct/100),gregAmt:b.amt*(1-moSplits[b.id].pct/100),pct:moSplits[b.id].pct,date:moSplits[b.id].date,settled:moSplits[b.id].settled,settledDate:moSplits[b.id].settledDate,source:"bill"})),...allCustom.map(c=>({...c,source:c.type||"custom"}))];
+const allItems=[...splitBills.map(b=>{const ba=getBillAmt(b);return{...b,amt:ba,sarahAmt:ba*(moSplits[b.id].pct/100),gregAmt:ba*(1-moSplits[b.id].pct/100),pct:moSplits[b.id].pct,date:moSplits[b.id].date,settled:moSplits[b.id].settled,settledDate:moSplits[b.id].settledDate,source:"bill"}}),...allCustom.map(c=>({...c,source:c.type||"custom"}))];
 
 const[showAdd,setShowAdd]=useState(false);const[showRecAdd,setShowRecAdd]=useState(false);
 const[nf,setNf]=useState({desc:"",total:"",pct:50});
@@ -1387,7 +1430,7 @@ case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} to
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} setBal={setBal} cur={cur}/>;
 case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal} varCap={varCap} setVarCap={setVarCap}/>;
-case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} customSplits={customSplits} setCustomSplits={setCustomSplits} recurringSplits={recurringSplits} setRecurringSplits={setRecurringSplits} mo={mo} billsPaid={billsPaid}/>;
+case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} customSplits={customSplits} setCustomSplits={setCustomSplits} recurringSplits={recurringSplits} setRecurringSplits={setRecurringSplits} mo={mo} billsPaid={billsPaid} billActuals={billActuals}/>;
 case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
 case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
 case"report":return<ReportPage T={T} cats={cats} byCat={byCat} totS={totS} totB={totB} savR={savR}/>;
