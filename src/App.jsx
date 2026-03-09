@@ -412,7 +412,7 @@ const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");c
 const[editCardId,setEditCardId]=useState(null);const[editCatId,setEditCatId]=useState(null);
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const byCard=useMemo(()=>{const m={};txns.filter(t=>!t.isBill).forEach(t=>{m[t.card]=(m[t.card]||0)+t.amt});return m},[txns]);
-const filtered=useMemo(()=>{let f=[...txns];if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);if(cardF)f=f.filter(t=>t.card===cardF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF,cardF]);
+const filtered=useMemo(()=>{let f=txns.filter(t=>!t.isBill);if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);if(cardF)f=f.filter(t=>t.card===cardF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF,cardF]);
 const addTxn=()=>{if(!af.desc||!af.amt)return;addTxnsSmart([{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card}]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
 const delTxn=id=>setTxns(p=>p.filter(t=>t.id!==id));
 
