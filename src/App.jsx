@@ -351,13 +351,18 @@ return(<div style={glass(T)}><div style={lbl(T)}>Daily Spending</div>
 // ═══════════════════════════════════════════════════
 // PAGES
 // ═══════════════════════════════════════════════════
-function DashPage({T,accent,data}){
+function DashPage({T,accent,data,qa,setQa,addQA}){
 const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc}=data;
 const nwC=nwP!==0?((nw-nwP)/Math.abs(nwP)*100):0;
 const dC=prev.loans>0?((totD-prev.loans)/prev.loans*100):0;
 const totalSav=cur.sav+cur.ira+cur.stk+(cur.jnt/2);
 const avgBurn=HISTORY.slice(-6).reduce((s,h)=>s+h.spend+h.fix,0)/6;
 return(<div>
+<div style={{...glass(T),marginBottom:14,display:"flex",gap:8,alignItems:"center"}}>
+<span style={{fontSize:16,color:T.textDim}}>$</span>
+<input value={qa} onChange={e=>setQa(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addQA()}
+placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),border:"none",background:"transparent",fontSize:13,flex:1,padding:"8px 0"}}/>
+<button onClick={addQA} disabled={!qa.trim()} style={{...btnS(T,true),opacity:qa.trim()?1:.4}}><Plus size={12}/>Add</button></div>
 <InsightBar insights={ins} idx={insI} T={T}/>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginTop:14}}>
 <StatCard title="Net Worth" value={fmt(nw)} change={nwC} icon={TrendingUp} color={T.success} T={T} delay={.05}/>
@@ -382,11 +387,12 @@ return(<div>
 <Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
 <SpendHeatmap txns={txns} dim={dim} off={mOff} T={T}/></div></div>)}
 
-function TxnPage({T,txns,setTxns,cats,mo,apiKey,aiModel}){
+function TxnPage({T,txns,setTxns,cats,mo,apiKey,aiModel,callAI}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[showAdd,setShowAdd]=useState(false);
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
 const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResults]=useState(null);const[scanError,setScanError]=useState("");
+const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");const[csvBank,setCsvBank]=useState("chase");const[csvParsed,setCsvParsed]=useState([]);
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const filtered=useMemo(()=>{let f=[...txns];if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF]);
 const addTxn=()=>{if(!af.desc||!af.amt)return;setTxns(p=>[{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card},...p]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
@@ -395,35 +401,25 @@ const delTxn=id=>setTxns(p=>p.filter(t=>t.id!==id));
 const handleImageUpload=e=>{const file=e.target.files?.[0];if(!file)return;
 const reader=new FileReader();reader.onload=ev=>{const b64=ev.target.result;setScanPreview(b64);setScanImg(b64.split(",")[1])};reader.readAsDataURL(file)};
 
+const parseCSV=(txt,bank)=>{try{const lines=txt.trim().split("\n").slice(1);return lines.map(l=>{const c=l.split(",").map(x=>x.replace(/"/g,"").trim());
+if(bank==="chase"){const a=Math.abs(parseFloat(c[5]));if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[2],amt:a,cat:autoCat(c[2]),card:"chase"}}
+if(bank==="capitalone"){const a=parseFloat(c[5])||0;if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[3],amt:a,cat:autoCat(c[3]),card:"capitalone"}}
+if(bank==="debit"){const a=Math.abs(parseFloat(c[2]));if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[1],amt:a,cat:autoCat(c[1]),card:"debit"}}
+return null}).filter(Boolean)}catch{return[]}};
+
 const scanImage=async()=>{if(!scanImg){setScanError("No image selected");return}
 if(!apiKey){setScanError("Set your API key in Settings first");return}
 setScanLoading(true);setScanError("");setScanResults(null);
 const catList=cats.map(c=>`${c.id}: ${c.name}`).join(", ");
-try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-body:JSON.stringify({model:aiModel||"claude-sonnet-4-20250514",max_tokens:2000,
-messages:[{role:"user",content:[
-{type:"image",source:{type:"base64",media_type:"image/png",data:scanImg}},
-{type:"text",text:`Extract ALL transactions from this image. For each transaction, determine the best category from: ${catList}.
-
-Return ONLY a JSON array with no other text, no markdown, no backticks. Each item: {"date":"YYYY-MM-DD","desc":"description","amt":number,"cat":"category_id"}
-
-Rules:
-- amt should always be positive
-- Use the most specific category that fits
-- If you can't determine the date, use today: ${new Date().toISOString().split("T")[0]}
-- Clean up merchant names (remove transaction IDs, card numbers etc)
-- If it's a receipt, extract individual line items if visible, otherwise use the total`}]}]})});
-const data=await res.json();
-if(data.error){setScanError(`API Error: ${data.error.message||data.error.type||JSON.stringify(data.error)}`);setScanLoading(false);return}
-const text=data.content?.map(c=>c.text||"").join("")||"";
-if(!text){setScanError("Empty response from API — check your credits or API key");setScanLoading(false);return}
+const prompt=`Extract ALL transactions from this image. For each transaction, determine the best category from: ${catList}.\n\nReturn ONLY a JSON array with no other text, no markdown, no backticks. Each item: {"date":"YYYY-MM-DD","desc":"description","amt":number,"cat":"category_id"}\n\nRules:\n- amt should always be positive\n- Use the most specific category that fits\n- If you can't determine the date, use today: ${new Date().toISOString().split("T")[0]}\n- Clean up merchant names (remove transaction IDs, card numbers etc)\n- If it's a receipt, extract individual line items if visible, otherwise use the total`;
+try{const text=await callAI({system:"You extract transactions from images. Return ONLY valid JSON arrays.",messages:[{role:"user",content:prompt,image:scanImg}],maxTokens:2000});
+if(!text){setScanError("Empty response — check your credits or API key");setScanLoading(false);return}
 const clean=text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim();
 try{const parsed=JSON.parse(clean);
-if(Array.isArray(parsed)&&parsed.length>0){
-setScanResults(parsed.map((t,i)=>({...t,id:Date.now()+i,card:"debit",selected:true})))}
+if(Array.isArray(parsed)&&parsed.length>0){setScanResults(parsed.map((t,i)=>({...t,id:Date.now()+i,card:"debit",selected:true})))}
 else{setScanError("No transactions found in image")}}
 catch(pe){setScanError("AI returned non-JSON. Response: "+clean.slice(0,200))}
-}catch(err){setScanError("Network error: "+(err.message||"Could not reach API"))}
+}catch(err){setScanError(err.message||"Could not reach API")}
 setScanLoading(false)};
 
 const addScanned=()=>{if(!scanResults)return;
@@ -438,8 +434,9 @@ return(<div>
 <select value={catF} onChange={e=>setCatF(e.target.value)} style={{...inpS(T),width:"auto",fontSize:11,padding:"8px 12px"}}>
 <option value="">All Categories</option>{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div>
 <div style={{display:"flex",gap:8}}>
-<button onClick={()=>{setScanMode(!scanMode);setShowAdd(false)}} style={{...btnS(T,scanMode),background:scanMode?T.purple:undefined,color:scanMode?"#fff":T.text}}><Camera size={12}/>Scan</button>
-<button onClick={()=>{setShowAdd(!showAdd);setScanMode(false)}} style={btnS(T,true)}><Plus size={12}/>Add</button>
+<button onClick={()=>{setScanMode(!scanMode);setShowAdd(false);setCsvMode(false)}} style={{...btnS(T,scanMode),background:scanMode?T.purple:undefined,color:scanMode?"#fff":T.text}}><Camera size={12}/>Scan</button>
+<button onClick={()=>{setCsvMode(!csvMode);setShowAdd(false);setScanMode(false)}} style={{...btnS(T,csvMode),background:csvMode?T.info:undefined,color:csvMode?"#fff":T.text}}><Upload size={12}/>CSV</button>
+<button onClick={()=>{setShowAdd(!showAdd);setScanMode(false);setCsvMode(false)}} style={btnS(T,true)}><Plus size={12}/>Add</button>
 <button onClick={()=>{const h="Date,Description,Amount,Category,Card\n";const r=txns.map(t=>`${t.d},"${t.desc}",${t.amt},${t.cat},${t.card}`).join("\n");const b=new Blob([h+r],{type:"text/csv"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`coinspire_${mo}.csv`;a.click()}} style={btnS(T,false)}><Download size={12}/>Export</button></div></div>
 
 {scanMode&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
@@ -480,6 +477,22 @@ return(<div>
 <button onClick={addScanned} style={{...btnS(T,true),flex:1,justifyContent:"center"}}><Check size={12}/>Add {scanResults.filter(t=>t.selected).length} Transactions</button>
 <button onClick={()=>{setScanResults(null);setScanImg(null);setScanPreview(null)}} style={btnS(T,false)}><X size={12}/>Redo</button></div></div>)}</div>}
 
+{csvMode&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}><Upload size={16} color={T.info}/><span style={{fontSize:14,fontWeight:700}}>CSV Import</span></div>
+<button onClick={()=>setCsvMode(false)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={16}/></button></div>
+<div style={{display:"flex",gap:8,marginBottom:10}}>
+<select value={csvBank} onChange={e=>setCsvBank(e.target.value)} style={{...inpS(T),width:"auto",fontSize:11}}>
+<option value="chase">Chase</option><option value="capitalone">Capital One</option><option value="debit">Debit/Bank</option></select>
+<div style={{fontSize:10,color:T.textDim,alignSelf:"center"}}>Paste your bank's CSV export below</div></div>
+<textarea value={csvTxt} onChange={e=>{setCsvTxt(e.target.value);setCsvParsed(parseCSV(e.target.value,csvBank))}} placeholder="Paste CSV data here..." rows={6} style={{...inpS(T),fontSize:11,fontFamily:"'Space Mono',monospace",resize:"vertical"}}/>
+{csvParsed.length>0&&<div style={{marginTop:10}}>
+<div style={pill(T.successBg,T.success)}>✓ Parsed {csvParsed.length} transactions</div>
+<div style={{maxHeight:200,overflow:"auto",marginTop:8}}>{csvParsed.slice(0,10).map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"4px 0",borderBottom:`1px solid ${T.border}`}}>
+<span>{t.desc?.slice(0,30)}</span><span style={{color:T.danger,fontWeight:600}}>{fmt(t.amt)}</span></div>)}</div>
+{csvParsed.length>10&&<div style={{fontSize:10,color:T.textDim}}>...and {csvParsed.length-10} more</div>}
+<button onClick={()=>{setTxns(p=>[...csvParsed,...p]);setCsvTxt("");setCsvParsed([]);setCsvMode(false)}} style={{...btnS(T,true),width:"100%",justifyContent:"center",marginTop:8}}><Check size={12}/>Import {csvParsed.length} Transactions</button></div>}</div>}
+
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
 <div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Date</div><input type="date" value={af.d} onChange={e=>setAf(p=>({...p,d:e.target.value}))} style={{...inpS(T),fontSize:11,padding:"8px 10px"}}/></div>
@@ -507,6 +520,7 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);return(
 <span>{filtered.length} transactions</span><span>Total: <strong style={{color:T.danger}}>{fmt(filtered.reduce((s,t)=>s+t.amt,0))}</strong></span></div></div>)}
 
 function BudgetPage({T,cats,setCats,byCat,totS,totB}){
+const[editId,setEditId]=useState(null);const[editVal,setEditVal]=useState("");
 return(<div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
 <StatCard title="Total Budget" value={fmt(totB)} icon={Target} color={T.info} T={T}/>
@@ -520,9 +534,20 @@ return(<div key={c.id} style={{padding:"14px 0",borderBottom:i<cats.length-1?`1p
 <span style={{fontSize:18}}>{c.icon}</span>
 <div><div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
 <div style={{fontSize:10,color:T.textDim}}>{fmt(spent)} of {fmt(c.budget)}</div></div></div>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+{editId===c.id?(
+<div style={{display:"flex",gap:4,alignItems:"center"}}>
+<span style={{fontSize:10,color:T.textDim}}>$</span>
+<input type="number" value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){setCats(p=>p.map(x=>x.id===c.id?{...x,budget:+editVal}:x));setEditId(null)}if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:70,fontSize:12,padding:"4px 8px"}} autoFocus/>
+<button onClick={()=>{setCats(p=>p.map(x=>x.id===c.id?{...x,budget:+editVal}:x));setEditId(null)}} style={{background:"none",border:"none",color:T.success,cursor:"pointer"}}><Check size={14}/></button>
+<button onClick={()=>setEditId(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={14}/></button></div>
+):(
+<div style={{display:"flex",alignItems:"center",gap:6}}>
 <div style={{textAlign:"right"}}>
 <div style={{fontSize:14,fontWeight:700,fontFamily:"'Space Mono',monospace",color:over?T.danger:T.success}}>{fmt(c.budget-spent)}</div>
-<div style={{fontSize:9,color:over?T.danger:T.textDim}}>{over?"OVER":"left"}</div></div></div>
+<div style={{fontSize:9,color:over?T.danger:T.textDim}}>{over?"OVER":"left"}</div></div>
+<button onClick={()=>{setEditId(c.id);setEditVal(String(c.budget))}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}}><Edit3 size={12}/></button></div>
+)}</div></div>
 <PBar pct={pct} color={pct>100?T.danger:pct>80?T.warn:T.success} height={5} bg={T.border}/>
 </div>)})}</div></div>)}
 
@@ -797,9 +822,53 @@ const[cScores,setCScores]=useState([]);const[csForm,setCsForm]=useState({score:"
 const[userGoals,setUserGoals]=useState(null);const[goalContribs,setGoalContribs]=useState({});
 const[aiOpen,setAiOpen]=useState(false);const[aiMsg,setAiMsg]=useState("");const[aiChat,setAiChat]=useState([]);const[aiLoading,setAiLoading]=useState(false);
 const[aiModel,setAiModel]=useState("claude-sonnet-4-20250514");
+const[aiProvider,setAiProvider]=useState("anthropic");
 const[userEmojis,setUserEmojis]=useState({greg:"🎸",sarah:"🌸"});
+
+const AI_PROVIDERS={
+anthropic:{name:"Claude (Anthropic)",models:[{id:"claude-sonnet-4-20250514",name:"Sonnet 4 (fast)"},{id:"claude-opus-4-20250514",name:"Opus 4 (smartest)"},{id:"claude-haiku-4-5-20251001",name:"Haiku 4.5 (cheapest)"}],placeholder:"sk-ant-..."},
+openai:{name:"OpenAI",models:[{id:"gpt-4o",name:"GPT-4o"},{id:"gpt-4o-mini",name:"GPT-4o Mini (cheap)"},{id:"gpt-4.1",name:"GPT-4.1"}],placeholder:"sk-..."},
+deepseek:{name:"DeepSeek",models:[{id:"deepseek-chat",name:"DeepSeek V3"},{id:"deepseek-reasoner",name:"DeepSeek R1 (reasoning)"}],placeholder:"sk-..."},
+gemini:{name:"Google Gemini",models:[{id:"gemini-2.5-flash",name:"Gemini 2.5 Flash"},{id:"gemini-2.5-pro",name:"Gemini 2.5 Pro"}],placeholder:"AIza..."}};
+
+const callAI=async({system,messages,image,maxTokens=1000})=>{
+const p=aiProvider;const m=aiModel;const k=apiKey;
+if(!k)throw new Error("No API key set");
+if(p==="anthropic"){
+const msgs=messages.map(msg=>{
+if(msg.image){return{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/png",data:msg.image}},{type:"text",text:msg.content}]}}
+return{role:msg.role,content:msg.content}});
+const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":k,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+body:JSON.stringify({model:m,max_tokens:maxTokens,system:system||undefined,messages:msgs})});
+const data=await res.json();if(data.error)throw new Error(data.error.message||data.error.type);
+return data.content?.map(c=>c.text||"").join("")||"";
+}
+if(p==="openai"||p==="deepseek"){
+const base=p==="openai"?"https://api.openai.com":"https://api.deepseek.com";
+const msgs=[];if(system)msgs.push({role:"system",content:system});
+messages.forEach(msg=>{
+if(msg.image){msgs.push({role:"user",content:[{type:"image_url",image_url:{url:`data:image/png;base64,${msg.image}`}},{type:"text",text:msg.content}]})}
+else{msgs.push({role:msg.role,content:msg.content})}});
+const res=await fetch(`${base}/v1/chat/completions`,{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${k}`},
+body:JSON.stringify({model:m,max_tokens:maxTokens,messages:msgs})});
+const data=await res.json();if(data.error)throw new Error(data.error.message||JSON.stringify(data.error));
+return data.choices?.[0]?.message?.content||"";
+}
+if(p==="gemini"){
+const msgs=[];if(system)msgs.push({role:"user",parts:[{text:"System: "+system}]});
+messages.forEach(msg=>{
+const parts=[];if(msg.image)parts.push({inlineData:{mimeType:"image/png",data:msg.image}});
+parts.push({text:msg.content});msgs.push({role:msg.role==="assistant"?"model":"user",parts})});
+const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${k}`,{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({contents:msgs,generationConfig:{maxOutputTokens:maxTokens}})});
+const data=await res.json();if(data.error)throw new Error(data.error.message||JSON.stringify(data.error));
+return data.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
+}
+throw new Error("Unknown provider: "+p)};
 const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());
 const[keySaved,setKeySaved]=useState(false);
+const[recurring,setRecurring]=useState([{desc:"Rent",amt:1200,cat:"misc"},{desc:"BCU Loan",amt:345,cat:"loan"},{desc:"UFC Fit",amt:120,cat:"rec"},{desc:"Mint Mobile",amt:30,cat:"misc"},{desc:"Internet",amt:22.50,cat:"misc"},{desc:"Cloud Storage",amt:12.99,cat:"misc"},{desc:"Insurance",amt:10,cat:"misc"},{desc:"Spotify",amt:9.26,cat:"misc"},{desc:"Prime",amt:8,cat:"misc"},{desc:"Photoshop",amt:7.50,cat:"misc"},{desc:"Netflix",amt:4,cat:"misc"}]);
+const[qa,setQa]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
 
@@ -807,8 +876,8 @@ useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("r
 const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 
 // Load/Save
-useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis)}setLoaded(true)})()},[activeUser]);
-useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis]);
+useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring)}setLoaded(true)})()},[activeUser]);
+useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring]);
 
 const txns=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
@@ -844,13 +913,12 @@ const sendAI=async()=>{if(!aiMsg.trim()||!apiKey)return;const um=aiMsg.trim();se
 const bCtx=cats.map(c=>`${c.name}:$${(byCat[c.id]||0).toFixed(0)}/$${c.budget}`).join(", ");
 const pPr={pro:"Professional financial advisor.",unhinged:"UNHINGED financial advisor. Roast spending. Caps lock. Drag them.",dark:"Financial advisor with dark humor. Deadpan gallows comedy.",therapist:"Financial therapist. Passive-aggressive.",hype:"HYPE BEAST advisor. Celebrate everything."};
 const sys=`${pPr[persona]||pPr.pro} Advisor for Greg, 33, Chicago. Direct, specific. Under 200 words.\nIncome $${cur.inc}/mo | Fixed $${cur.fix} | Budget: ${bCtx} | Spent $${totS.toFixed(0)}/$${totB}\nDEBT: $${totD} | ASSETS: Sav $${cur.sav} | IRA $${cur.ira} | Stk $${cur.stk} | Joint $${cur.jnt} | NW $${nw.toFixed(0)}\nSavings rate ${savR.toFixed(1)}%`;
-try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-body:JSON.stringify({model:aiModel||"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}]})});
-const data=await res.json();setAiChat(p=>[...p,{role:"ai",text:data.content?.map(c=>c.text||"").join("")||"No response."}])}catch{setAiChat(p=>[...p,{role:"ai",text:"Error. Check Settings > API Key."}])}setAiLoading(false)};
+try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}]});
+setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
-case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}}/>;
-case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo} apiKey={apiKey} aiModel={aiModel}/>;
+case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){setTxns(p=>[{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim()),card:"debit"},...p]);setQa("")}}}/>;
+case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
@@ -876,24 +944,35 @@ case"settings":return(
 <input type="number" value={bal[k]} onChange={e=>setBal(p=>({...p,[k]:+e.target.value}))} style={inpS(T)}/></div>)}</div></div>
 <div style={{marginBottom:20}}><div style={lbl(T)}>Side Income ($/mo)</div>
 <input type="number" value={sideIncome} onChange={e=>setSideIncome(+e.target.value)} style={inpS(T)}/></div>
-<div style={{marginBottom:20}}><div style={lbl(T)}>Anthropic API Key</div>
+<div style={{marginBottom:20}}><div style={lbl(T)}>AI Provider</div>
+<select value={aiProvider} onChange={e=>{setAiProvider(e.target.value);const models=AI_PROVIDERS[e.target.value]?.models;if(models)setAiModel(models[0].id);setKeySaved(false)}} style={inpS(T)}>
+{Object.entries(AI_PROVIDERS).map(([id,p])=><option key={id} value={id}>{p.name}</option>)}</select></div>
+<div style={{marginBottom:20}}><div style={lbl(T)}>API Key ({AI_PROVIDERS[aiProvider]?.name})</div>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
-<input type="password" value={apiKey} onChange={e=>{setApiKey(e.target.value);setKeySaved(false)}} placeholder="sk-ant-..." style={{...inpS(T),flex:1}}/>
+<input type="password" value={apiKey} onChange={e=>{setApiKey(e.target.value);setKeySaved(false)}} placeholder={AI_PROVIDERS[aiProvider]?.placeholder||"API key..."} style={{...inpS(T),flex:1}}/>
 <button onClick={()=>setKeySaved(true)} style={btnS(T,true)}>{keySaved?<><Check size={12}/>Saved</>:<><Save size={12}/>Save</>}</button></div>
-<div style={{fontSize:10,color:keySaved?T.success:T.textDim,marginTop:4}}>{keySaved?"✓ Key saved — auto-persists per user":"Required for AI features (scanning, chat)"}</div></div>
+<div style={{fontSize:10,color:keySaved?T.success:T.textDim,marginTop:4}}>{keySaved?"✓ Key saved":"Required for scanning + chat"}</div></div>
 <div style={{marginBottom:20}}><div style={lbl(T)}>AI Model</div>
 <select value={aiModel} onChange={e=>setAiModel(e.target.value)} style={inpS(T)}>
-<option value="claude-sonnet-4-20250514">Claude Sonnet 4 (fast, cheap)</option>
-<option value="claude-opus-4-20250514">Claude Opus 4 (smartest)</option>
-<option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fastest, cheapest)</option>
-</select>
-<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Used for transaction scanning and AI chat</div></div>
+{(AI_PROVIDERS[aiProvider]?.models||[]).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
 <div style={{marginBottom:20}}><div style={lbl(T)}>Your Emoji</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
 <span style={{fontSize:32}}>{userEmojis[activeUser]||"😀"}</span>
 <input value={userEmojis[activeUser]||""} onChange={e=>{const v=e.target.value;const emoji=[...v].slice(-1).join("")||"😀";setUserEmojis(p=>({...p,[activeUser]:emoji}))}} style={{...inpS(T),width:80,fontSize:24,textAlign:"center"}} maxLength={4}/>
-<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["🎸","🌸","🎧","💰","🔥","🎯","🚀","⚡","🎨","👑","🦊","🐻"].map(e=>
+<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["🎸","🌸","🎧","💰","🔥","🎯","🚀","⚡","🎨","👑","🦊","🐻","🎵","🌊","🍕","🏀","🎮","🧠","💎","🌙","☀️","🦋","🐉","🍀","🎲","🏆","🎤","🦈","🐺","🌺","💜","🖤","🤖","👽","🦁","🐱","🐶","🦄","🍷","☕","🏔️","🌈","💫","🔮","✨","🎪","🛹","🎹"].map(e=>
 <button key={e} onClick={()=>setUserEmojis(p=>({...p,[activeUser]:e}))} style={{fontSize:18,background:userEmojis[activeUser]===e?T.successBg:"transparent",border:`1px solid ${userEmojis[activeUser]===e?T.success:T.border}`,borderRadius:8,padding:"4px 6px",cursor:"pointer"}}>{e}</button>)}</div></div></div>
+<div style={{marginBottom:20}}><div style={lbl(T)}>Recurring Bills</div>
+<div style={{maxHeight:250,overflow:"auto"}}>
+{recurring.map((r,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
+<input value={r.desc} onChange={e=>{const nr=[...recurring];nr[i]={...nr[i],desc:e.target.value};setRecurring(nr)}} style={{...inpS(T),flex:1,fontSize:11,padding:"5px 8px"}}/>
+<input type="number" value={r.amt} onChange={e=>{const nr=[...recurring];nr[i]={...nr[i],amt:+e.target.value};setRecurring(nr)}} style={{...inpS(T),width:70,fontSize:11,padding:"5px 8px"}}/>
+<select value={r.cat} onChange={e=>{const nr=[...recurring];nr[i]={...nr[i],cat:e.target.value};setRecurring(nr)}} style={{...inpS(T),width:"auto",fontSize:10,padding:"5px 6px"}}>
+{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select>
+<button onClick={()=>setRecurring(recurring.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.danger,cursor:"pointer"}}><Trash2 size={12}/></button></div>)}</div>
+<div style={{display:"flex",gap:6,marginTop:8}}>
+<button onClick={()=>setRecurring([...recurring,{desc:"New Bill",amt:0,cat:"misc"}])} style={btnS(T,false)}><Plus size={11}/>Add Bill</button>
+<button onClick={()=>{const d=new Date().toISOString().split("T")[0];setTxns(p=>[...recurring.map((b,i)=>({id:Date.now()+i,d,desc:b.desc,amt:b.amt,cat:b.cat,card:"debit"})),...p])}} style={btnS(T,true)}><Zap size={11}/>Log All ({fmt(recurring.reduce((s,r)=>s+r.amt,0))})</button></div>
+<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Edit bills above. "Log All" adds them as transactions for this month.</div></div>
 <div><div style={lbl(T)}>Account</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
 <span style={{fontSize:24}}>{userEmojis[activeUser]||USERS.find(u=>u.id===activeUser)?.icon}</span>
