@@ -11,7 +11,8 @@ import {
   Save, Repeat, Shield, Tag, Calculator, FileBarChart,
   Trash2, Search, Plane, Briefcase, Flag, AlertTriangle,
   Activity, Award, Timer, Gauge, Rocket, Menu, ChevronLeft,
-  Check, Upload, Lock, User, Eye, EyeOff, Filter, Camera, Loader
+  Check, Upload, Lock, User, Eye, EyeOff, Filter, Camera, Loader,
+  MessageCircle, Send, Hash
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -615,11 +616,146 @@ return(<div>
 <Area type="monotone" dataKey="jnt" stackId="1" stroke={T.warn} fill={T.warn+"30"} name="Joint"/>
 </AreaChart></ResponsiveContainer></div></div>)}
 
+function NWPage({T,bal,cur}){
+const nwData=HISTORY.map(h=>{const nw=(h.sav+h.ira+h.stk+h.jnt/2)-h.loans;return{name:h.m,nw,assets:h.sav+h.ira+h.stk+h.jnt/2,debt:h.loans}});
+const curNW=nwData[nwData.length-1]?.nw||0;const firstNW=nwData[0]?.nw||0;
+const totalGain=curNW-firstNW;const avgGain=totalGain/Math.max(1,nwData.length);
+const peak=Math.max(...nwData.map(d=>d.nw));
+return(<div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:14}}>
+<StatCard title="Net Worth" value={fmt(curNW)} icon={TrendingUp} color={T.success} T={T}/>
+<StatCard title="Total Gain" value={fmt(totalGain)} icon={ArrowUpRight} color={totalGain>0?T.success:T.danger} T={T}/>
+<StatCard title="Avg/Month" value={fmt(avgGain)} icon={BarChart3} color={T.info} T={T}/>
+<StatCard title="Peak" value={fmt(peak)} icon={Zap} color={T.purple} T={T}/></div>
+<div style={glass(T)}><div style={lbl(T)}>Net Worth Over Time</div>
+<ResponsiveContainer width="100%" height={250}>
+<AreaChart data={nwData}><defs><linearGradient id="nwFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.success} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={0}/></linearGradient></defs>
+<CartesianGrid strokeDasharray="3 3" stroke={T.border}/><XAxis dataKey="name" tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
+<YAxis tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`}/>
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v)]}/>
+<Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwFill)" name="Net Worth"/></AreaChart></ResponsiveContainer></div>
+<div style={{...glass(T),marginTop:14}}><div style={lbl(T)}>Assets vs Debt</div>
+<ResponsiveContainer width="100%" height={200}>
+<BarChart data={nwData}><CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+<XAxis dataKey="name" tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
+<YAxis tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`}/>
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v)]}/>
+<Bar dataKey="assets" fill={T.success} name="Assets" radius={[4,4,0,0]}/><Bar dataKey="debt" fill={T.danger} name="Debt" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div></div>)}
+
+function GoalsPage({T,userGoals,setUserGoals,goalContribs,setGoalContribs,cur,totalDebt}){
+const euroT=8000;const euroS=2400;const euroDate=new Date(2026,7,1);const now=new Date();
+const euroDays=Math.max(0,Math.ceil((euroDate-now)/86400000));
+const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:31241,icon:"🏆",inv:true},
+{id:"europe",name:"Europe Trip",cur:euroS,max:euroT,icon:"✈️"},{id:"ira",name:"IRA Max",cur:cur.ira,max:7000,icon:"📈"},
+{id:"emerg",name:"Emergency Fund",cur:cur.sav+(cur.jnt/2),max:10000,icon:"🛡️"}];
+const gl=userGoals||defaultGoals.map(g=>({id:g.id,name:g.name,max:g.max,icon:g.icon}));
+const totalContrib=gid=>(goalContribs[gid]||[]).reduce((s,c)=>s+c.amt,0);
+const addContrib=(gid,amt,note)=>{setGoalContribs(p=>({...p,[gid]:[...(p[gid]||[]),{amt:+amt,date:now.toISOString().split("T")[0],note:note||""}]}))};
+return(<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+<div style={{fontSize:18,fontWeight:700}}>Goals</div>
+<button onClick={()=>{const n=prompt("Goal name:");const t=prompt("Target amount:");if(n&&t){setUserGoals([...gl,{id:"g"+Date.now(),name:n,max:+t,icon:"🎯"}])}}} style={btnS(T,true)}><Plus size={11}/>New Goal</button></div>
+{gl.map(g=>{const dg=defaultGoals.find(d=>d.id===g.id);const curVal=dg?dg.cur:totalContrib(g.id);const max=g.max||dg?.max||1;
+const pct=g.id==="debt"?((max-curVal)/max*100):(curVal/max*100);const contribs=goalContribs[g.id]||[];
+return(<div key={g.id} style={{...glass(T),marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:22}}>{g.icon}</span>
+<div><div style={{fontSize:14,fontWeight:700}}>{g.name}</div>
+<div style={{fontSize:10,color:T.textDim}}>{fmt(curVal)} of {fmt(max)}</div></div></div>
+<div style={{display:"flex",gap:4}}>
+<button onClick={()=>{const a=prompt("Amount:");if(a)addContrib(g.id,a,prompt("Note:"))}} style={btnS(T,true)}><Plus size={10}/>Log</button>
+{!dg&&<button onClick={()=>setUserGoals(gl.filter(x=>x.id!==g.id))} style={{...btnS(T,false),color:T.danger}}><Trash2 size={10}/></button>}</div></div>
+<PBar pct={Math.min(pct,100)} color={pct>=100?T.success:pct>60?T.info:T.warn} height={8} bg={T.border}/>
+<div style={{display:"flex",gap:12,fontSize:10,color:T.textDim,marginTop:8}}>
+<span><strong style={{color:T.text}}>{pct.toFixed(0)}%</strong> complete</span>
+<span><strong style={{color:T.text}}>{fmt(max-curVal)}</strong> to go</span></div>
+{contribs.length>0&&<div style={{borderTop:`1px solid ${T.border}`,paddingTop:8,marginTop:8}}>
+<div style={{fontSize:9,color:T.textDim,fontWeight:700,marginBottom:4}}>HISTORY</div>
+{contribs.slice(-5).reverse().map((c,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"3px 0",borderBottom:`1px solid ${T.border}`}}>
+<span style={{color:T.textDim}}>{c.date} {c.note&&"— "+c.note}</span>
+<span style={{fontWeight:600,color:T.success}}>+{fmt(c.amt)}</span></div>)}</div>}
+</div>)})}</div>)}
+
+function ReportPage({T,cats,byCat,totS,totB,savR}){
+const grades=cats.map(c=>{const s=byCat[c.id]||0;const r=c.budget>0?s/c.budget:0;
+let g="A";if(r>1.5)g="F";else if(r>1.2)g="D";else if(r>1)g="C";else if(r>.8)g="B";
+const gc={A:T.success,B:T.info,C:T.warn,D:T.danger,F:T.danger};
+return{...c,spent:s,ratio:r,grade:g,color:gc[g]}});
+const overall=totB>0&&totS<=totB?"A":totS<=totB*1.1?"B":totS<=totB*1.3?"C":"D";
+const oc={A:T.success,B:T.info,C:T.warn,D:T.danger};
+return(<div>
+<div style={{...glass(T),textAlign:"center",marginBottom:14}}>
+<div style={lbl(T)}>Overall Grade</div>
+<div style={{fontSize:64,fontWeight:900,fontFamily:"'Space Mono',monospace",color:oc[overall],lineHeight:1}}>{overall}</div>
+<div style={{fontSize:12,color:T.textMuted,marginTop:4}}>Savings rate: {savR.toFixed(1)}% • {fmt(totB-totS)} {totS>totB?"over":"under"} budget</div></div>
+<div style={glass(T)}>
+<div style={lbl(T)}>Category Grades</div>
+{grades.map((g,i)=><div key={g.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<grades.length-1?`1px solid ${T.border}`:"none"}}>
+<span style={{fontSize:16}}>{g.icon}</span>
+<div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{g.name}</div>
+<div style={{fontSize:10,color:T.textDim}}>{fmt(g.spent)} / {fmt(g.budget)}</div></div>
+<PBar pct={g.ratio*100} color={g.color} height={4} bg={T.border}/>
+<div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:g.color,minWidth:28,textAlign:"center"}}>{g.grade}</div></div>)}</div></div>)}
+
+function CreditPage({T,cScores,setCScores,csForm,setCsForm}){
+const addScore=()=>{if(!csForm.score)return;setCScores(p=>[...p,{score:+csForm.score,date:csForm.date}].sort((a,b)=>a.date.localeCompare(b.date)));setCsForm({score:"",date:new Date().toISOString().slice(0,7)})};
+const latest=cScores[cScores.length-1];const prev=cScores[cScores.length-2];
+const change=latest&&prev?(latest.score-prev.score):0;
+const tier=s=>s>=750?"Excellent":s>=700?"Good":s>=650?"Fair":"Needs Work";
+const tierC=s=>s>=750?T.success:s>=700?T.info:s>=650?T.warn:T.danger;
+return(<div>
+{latest&&<div style={{...glass(T),textAlign:"center",marginBottom:14}}>
+<div style={lbl(T)}>Credit Score</div>
+<div style={{fontSize:56,fontWeight:900,fontFamily:"'Space Mono',monospace",color:tierC(latest.score),lineHeight:1}}>{latest.score}</div>
+<div style={pill(tierC(latest.score)+"18",tierC(latest.score))}>{tier(latest.score)}</div>
+{change!==0&&<div style={{marginTop:8,fontSize:12,color:change>0?T.success:T.danger}}>{change>0?"+":""}{change} pts from last check</div>}</div>}
+{cScores.length>1&&<div style={{...glass(T),marginBottom:14}}><div style={lbl(T)}>Score History</div>
+<ResponsiveContainer width="100%" height={180}>
+<LineChart data={cScores}><CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+<XAxis dataKey="date" tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
+<YAxis domain={[550,850]} tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}}/>
+<Line type="monotone" dataKey="score" stroke={T.success} strokeWidth={2} dot={{fill:T.success,r:4}}/></LineChart></ResponsiveContainer></div>}
+<div style={glass(T)}>
+<div style={lbl(T)}>Log Score</div>
+<div style={{display:"flex",gap:8,alignItems:"end"}}>
+<div style={{flex:1}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Score</div>
+<input type="number" value={csForm.score} onChange={e=>setCsForm(p=>({...p,score:e.target.value}))} placeholder="740" style={inpS(T)}/></div>
+<div style={{flex:1}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Month</div>
+<input type="month" value={csForm.date} onChange={e=>setCsForm(p=>({...p,date:e.target.value}))} style={inpS(T)}/></div>
+<button onClick={addScore} disabled={!csForm.score} style={{...btnS(T,true),opacity:csForm.score?1:.5}}><Plus size={12}/>Add</button></div>
+{!latest&&<div style={{textAlign:"center",padding:20,color:T.textDim,fontSize:12}}>No scores logged yet. Add your first one above.</div>}</div></div>)}
+
+function CalPage({T,months,calMo,setCalMo,calYr,setCalYr}){
+const dim=new Date(calYr,calMo+1,0).getDate();const off=(new Date(calYr,calMo,1).getDay()+6)%7;
+const mk=`${MO[calMo]}'${String(calYr).slice(2)}`;const txns=months[mk]?.txns||[];
+const dt={};txns.forEach(t=>{const d=parseInt(t.d.split("-")[2]);dt[d]=(dt[d]||0)+t.amt});
+const mx=Math.max(...Object.values(dt),1);
+const gc=a=>{if(!a)return T.border+"30";const i=Math.min(a/mx,1);return i<.3?T.success+"50":i<.6?T.warn+"60":T.danger+"80"};
+const prev=()=>{if(calMo===0){setCalMo(11);setCalYr(calYr-1)}else setCalMo(calMo-1)};
+const next=()=>{if(calMo===11){setCalMo(0);setCalYr(calYr+1)}else setCalMo(calMo+1)};
+return(<div>
+<div style={{...glass(T),marginBottom:14}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<button onClick={prev} style={btnS(T,false)}><ChevronLeft size={14}/></button>
+<div style={{fontSize:18,fontWeight:700}}>{MO[calMo]} {calYr}</div>
+<button onClick={next} style={btnS(T,false)}><ChevronRight size={14}/></button></div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=><div key={d} style={{fontSize:10,textAlign:"center",color:T.textDim,fontWeight:600,padding:4}}>{d}</div>)}
+{Array.from({length:off},(_,i)=><div key={`p${i}`}/>)}
+{Array.from({length:dim},(_,i)=>{const day=i+1;const a=dt[day]||0;const isToday=day===new Date().getDate()&&calMo===new Date().getMonth()&&calYr===new Date().getFullYear();
+return(<div key={day} style={{padding:8,borderRadius:8,background:gc(a),border:isToday?`2px solid ${T.success}`:`1px solid ${T.border}30`,minHeight:48,cursor:a?"pointer":"default"}}>
+<div style={{fontSize:10,fontWeight:isToday?700:500,color:isToday?T.success:T.text}}>{day}</div>
+{a>0&&<div style={{fontSize:9,fontWeight:600,color:T.danger,marginTop:2}}>{fmt(a)}</div>}
+</div>)})}</div></div>
+{txns.length>0&&<div style={glass(T)}><div style={lbl(T)}>Transactions this month</div>
+<div style={{fontSize:12,color:T.textMuted}}>{txns.length} transactions totaling <strong style={{color:T.danger}}>{fmt(txns.reduce((s,t)=>s+t.amt,0))}</strong></div></div>}</div>)}
+
 function PlaceholderPage({title,icon:Icon,T}){return(
 <div style={{...glass(T),textAlign:"center",padding:60}}>
 <Icon size={40} color={T.textDim} style={{marginBottom:16}}/>
 <div style={{fontSize:20,fontWeight:700,marginBottom:8}}>{title}</div>
-<div style={{fontSize:13,color:T.textMuted}}>Coming in Phase 3</div></div>)}
+<div style={{fontSize:13,color:T.textMuted}}>Coming soon</div></div>)}
 
 // ═══════════════════════════════════════════════════
 // NAV
@@ -654,6 +790,11 @@ const[months,setMonths]=useState({[curMK]:{txns:SAMPLE_TXNS,budgets:DEFAULT_CATS
 const[bal,setBal]=useState({sav:313,ira:3194,stk:1376,jnt:49966,inc:5656,fix:1780});
 const[debts,setDebts]=useState(DEBTS_DEFAULT);const[subs,setSubs]=useState(SUBS_DEFAULT);
 const[sideIncome,setSideIncome]=useState(0);const[apiKey,setApiKey]=useState("");
+const[cScores,setCScores]=useState([]);const[csForm,setCsForm]=useState({score:"",date:new Date().toISOString().slice(0,7)});
+const[userGoals,setUserGoals]=useState(null);const[goalContribs,setGoalContribs]=useState({});
+const[aiOpen,setAiOpen]=useState(false);const[aiMsg,setAiMsg]=useState("");const[aiChat,setAiChat]=useState([]);const[aiLoading,setAiLoading]=useState(false);
+const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());
+const[keySaved,setKeySaved]=useState(false);
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
 
@@ -661,8 +802,8 @@ useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("r
 const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 
 // Load/Save
-useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey)}setLoaded(true)})()},[activeUser]);
-useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey]);
+useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs)}setLoaded(true)})()},[activeUser]);
+useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs]);
 
 const txns=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
@@ -694,6 +835,14 @@ useEffect(()=>{const iv=setInterval(()=>setInsI(i=>(i+1)%insights.length),6000);
 if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
 <LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T}/></>);
 
+const sendAI=async()=>{if(!aiMsg.trim()||!apiKey)return;const um=aiMsg.trim();setAiChat(p=>[...p,{role:"user",text:um}]);setAiMsg("");setAiLoading(true);
+const bCtx=cats.map(c=>`${c.name}:$${(byCat[c.id]||0).toFixed(0)}/$${c.budget}`).join(", ");
+const pPr={pro:"Professional financial advisor.",unhinged:"UNHINGED financial advisor. Roast spending. Caps lock. Drag them.",dark:"Financial advisor with dark humor. Deadpan gallows comedy.",therapist:"Financial therapist. Passive-aggressive.",hype:"HYPE BEAST advisor. Celebrate everything."};
+const sys=`${pPr[persona]||pPr.pro} Advisor for Greg, 33, Chicago. Direct, specific. Under 200 words.\nIncome $${cur.inc}/mo | Fixed $${cur.fix} | Budget: ${bCtx} | Spent $${totS.toFixed(0)}/$${totB}\nDEBT: $${totD} | ASSETS: Sav $${cur.sav} | IRA $${cur.ira} | Stk $${cur.stk} | Joint $${cur.jnt} | NW $${nw.toFixed(0)}\nSavings rate ${savR.toFixed(1)}%`;
+try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}]})});
+const data=await res.json();setAiChat(p=>[...p,{role:"ai",text:data.content?.map(c=>c.text||"").join("")||"No response."}])}catch{setAiChat(p=>[...p,{role:"ai",text:"Error. Check Settings > API Key."}])}setAiLoading(false)};
+
 const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo} apiKey={apiKey}/>;
@@ -701,11 +850,11 @@ case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} to
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
 case"sub":return<SubsPage T={T} subs={subs} setSubs={setSubs}/>;
-case"nwt":return<PlaceholderPage title="Net Worth" icon={TrendingUp} T={T}/>;
-case"goals":return<PlaceholderPage title="Goals" icon={Rocket} T={T}/>;
-case"report":return<PlaceholderPage title="Report Card" icon={FileBarChart} T={T}/>;
-case"credit":return<PlaceholderPage title="Credit Score" icon={Shield} T={T}/>;
-case"cal":return<PlaceholderPage title="Calendar" icon={Calendar} T={T}/>;
+case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
+case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
+case"report":return<ReportPage T={T} cats={cats} byCat={byCat} totS={totS} totB={totB} savR={savR}/>;
+case"credit":return<CreditPage T={T} cScores={cScores} setCScores={setCScores} csForm={csForm} setCsForm={setCsForm}/>;
+case"cal":return<CalPage T={T} months={months} calMo={calMo} setCalMo={setCalMo} calYr={calYr} setCalYr={setCalYr}/>;
 case"settings":return(
 <div style={glass(T)}>
 <div style={{fontSize:18,fontWeight:700,marginBottom:20}}>Settings</div>
@@ -723,8 +872,10 @@ case"settings":return(
 <div style={{marginBottom:20}}><div style={lbl(T)}>Side Income ($/mo)</div>
 <input type="number" value={sideIncome} onChange={e=>setSideIncome(+e.target.value)} style={inpS(T)}/></div>
 <div style={{marginBottom:20}}><div style={lbl(T)}>Anthropic API Key</div>
-<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={inpS(T)}/>
-<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Required for AI features (transaction scanning, chat). Stored locally per user.</div></div>
+<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<input type="password" value={apiKey} onChange={e=>{setApiKey(e.target.value);setKeySaved(false)}} placeholder="sk-ant-..." style={{...inpS(T),flex:1}}/>
+<button onClick={()=>setKeySaved(true)} style={btnS(T,true)}>{keySaved?<><Check size={12}/>Saved</>:<><Save size={12}/>Save</>}</button></div>
+<div style={{fontSize:10,color:keySaved?T.success:T.textDim,marginTop:4}}>{keySaved?"✓ Key saved — auto-persists per user":"Required for AI features (scanning, chat)"}</div></div>
 <div><div style={lbl(T)}>Account</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
 <span style={{fontSize:24}}>{USERS.find(u=>u.id===activeUser)?.icon}</span>
@@ -780,4 +931,24 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 {NAV.map(item=>{const act=tab===item.id;return(
 <button key={item.id} onClick={()=>{setTab(item.id);setSideOpen(false)}} style={{width:"100%",padding:"11px 18px",display:"flex",alignItems:"center",gap:10,background:act?accent+"12":"transparent",border:"none",borderLeft:act?`3px solid ${accent}`:"3px solid transparent",color:act?accent:T.textMuted,cursor:"pointer",fontSize:13,fontWeight:act?700:500}}>
 <item.icon size={16}/>{item.label}</button>)})}</nav></div>}
+
+{/* AI Chat FAB + Panel */}
+{apiKey&&<>
+<button onClick={()=>setAiOpen(!aiOpen)} style={{position:"fixed",bottom:mob?72:24,right:24,width:52,height:52,borderRadius:16,background:`linear-gradient(135deg,${T.purple},${T.info})`,border:"none",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 4px 20px ${T.purple}40`,zIndex:90,transition:"transform .2s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+{aiOpen?<X size={22}/>:<MessageCircle size={22}/>}</button>
+{aiOpen&&<div style={{position:"fixed",bottom:mob?130:84,right:24,width:360,maxWidth:"calc(100vw - 48px)",height:440,background:T.card,border:`1px solid ${T.border}`,borderRadius:20,display:"flex",flexDirection:"column",zIndex:90,boxShadow:`0 8px 32px rgba(0,0,0,.3)`,animation:"fadeUp .2s ease"}}>
+<div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
+<span style={{fontSize:18}}>{PERSONAS[persona]?.icon||"📊"}</span>
+<div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>Coinspire AI</div>
+<div style={{fontSize:10,color:T.textDim}}>{PERSONAS[persona]?.name} mode</div></div>
+<button onClick={()=>setAiChat([])} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",fontSize:10}}>Clear</button></div>
+<div style={{flex:1,overflow:"auto",padding:14,display:"flex",flexDirection:"column",gap:10}}>
+{aiChat.length===0&&<div style={{textAlign:"center",color:T.textDim,fontSize:12,marginTop:40}}>Ask me anything about your finances.<br/>I know your budget, debt, savings — all of it.</div>}
+{aiChat.map((m,i)=><div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?T.purple+"20":T.bg,color:T.text,fontSize:12,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{m.text}</div>)}
+{aiLoading&&<div style={{alignSelf:"flex-start",padding:"10px 14px",borderRadius:14,background:T.bg,color:T.textDim,fontSize:12}}>
+<Loader size={12} style={{animation:"spin 1s linear infinite",display:"inline-block",marginRight:6}}/>Thinking...</div>}</div>
+<div style={{padding:12,borderTop:`1px solid ${T.border}`,display:"flex",gap:8}}>
+<input value={aiMsg} onChange={e=>setAiMsg(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendAI()} placeholder="Ask about your money..." style={{...inpS(T),fontSize:12,borderRadius:12}}/>
+<button onClick={sendAI} disabled={!aiMsg.trim()||aiLoading} style={{...btnS(T,true),borderRadius:12,background:T.purple,color:"#fff",opacity:(!aiMsg.trim()||aiLoading)?.5:1}}><Send size={14}/></button></div></div>}</>}
+
 </div>)}
