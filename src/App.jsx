@@ -11,7 +11,7 @@ import {
   Save, Repeat, Shield, Tag, Calculator, FileBarChart,
   Trash2, Search, Plane, Briefcase, Flag, AlertTriangle,
   Activity, Award, Timer, Gauge, Rocket, Menu, ChevronLeft,
-  Check, Upload, Lock, User, Eye, EyeOff, Filter
+  Check, Upload, Lock, User, Eye, EyeOff, Filter, Camera, Loader
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -381,12 +381,51 @@ return(<div>
 <Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
 <SpendHeatmap txns={txns} dim={dim} off={mOff} T={T}/></div></div>)}
 
-function TxnPage({T,txns,setTxns,cats,mo}){
+function TxnPage({T,txns,setTxns,cats,mo,apiKey}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[showAdd,setShowAdd]=useState(false);
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
+const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
+const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResults]=useState(null);const[scanError,setScanError]=useState("");
+const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const filtered=useMemo(()=>{let f=[...txns];if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF]);
 const addTxn=()=>{if(!af.desc||!af.amt)return;setTxns(p=>[{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card},...p]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
 const delTxn=id=>setTxns(p=>p.filter(t=>t.id!==id));
+
+const handleImageUpload=e=>{const file=e.target.files?.[0];if(!file)return;
+const reader=new FileReader();reader.onload=ev=>{const b64=ev.target.result;setScanPreview(b64);setScanImg(b64.split(",")[1])};reader.readAsDataURL(file)};
+
+const scanImage=async()=>{if(!scanImg){setScanError("No image selected");return}
+if(!apiKey){setScanError("Set your API key in Settings first");return}
+setScanLoading(true);setScanError("");setScanResults(null);
+const catList=cats.map(c=>`${c.id}: ${c.name}`).join(", ");
+try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,
+messages:[{role:"user",content:[
+{type:"image",source:{type:"base64",media_type:"image/png",data:scanImg}},
+{type:"text",text:`Extract ALL transactions from this image. For each transaction, determine the best category from: ${catList}.
+
+Return ONLY a JSON array with no other text, no markdown, no backticks. Each item: {"date":"YYYY-MM-DD","desc":"description","amt":number,"cat":"category_id"}
+
+Rules:
+- amt should always be positive
+- Use the most specific category that fits
+- If you can't determine the date, use today: ${new Date().toISOString().split("T")[0]}
+- Clean up merchant names (remove transaction IDs, card numbers etc)
+- If it's a receipt, extract individual line items if visible, otherwise use the total`}]}]})});
+const data=await res.json();
+const text=data.content?.map(c=>c.text||"").join("")||"";
+const clean=text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim();
+const parsed=JSON.parse(clean);
+if(Array.isArray(parsed)&&parsed.length>0){
+setScanResults(parsed.map((t,i)=>({...t,id:Date.now()+i,card:"debit",selected:true})))}
+else{setScanError("No transactions found in image")}
+}catch(err){setScanError("Failed to parse: "+(err.message||"Check API key"))}
+setScanLoading(false)};
+
+const addScanned=()=>{if(!scanResults)return;
+const toAdd=scanResults.filter(t=>t.selected).map(t=>({id:t.id,d:t.date||new Date().toISOString().split("T")[0],desc:t.desc,amt:t.amt,cat:t.cat||"misc",card:t.card||"debit"}));
+setTxns(p=>[...toAdd,...p]);setScanMode(false);setScanResults(null);setScanImg(null);setScanPreview(null)};
+
 return(<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
 <div style={{display:"flex",gap:8,flex:1,minWidth:200}}>
@@ -395,8 +434,47 @@ return(<div>
 <select value={catF} onChange={e=>setCatF(e.target.value)} style={{...inpS(T),width:"auto",fontSize:11,padding:"8px 12px"}}>
 <option value="">All Categories</option>{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div>
 <div style={{display:"flex",gap:8}}>
-<button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={12}/>Add</button>
+<button onClick={()=>{setScanMode(!scanMode);setShowAdd(false)}} style={{...btnS(T,scanMode),background:scanMode?T.purple:undefined,color:scanMode?"#fff":T.text}}><Camera size={12}/>Scan</button>
+<button onClick={()=>{setShowAdd(!showAdd);setScanMode(false)}} style={btnS(T,true)}><Plus size={12}/>Add</button>
 <button onClick={()=>{const h="Date,Description,Amount,Category,Card\n";const r=txns.map(t=>`${t.d},"${t.desc}",${t.amt},${t.cat},${t.card}`).join("\n");const b=new Blob([h+r],{type:"text/csv"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`coinspire_${mo}.csv`;a.click()}} style={btnS(T,false)}><Download size={12}/>Export</button></div></div>
+
+{scanMode&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}><Camera size={16} color={T.purple}/><span style={{fontSize:14,fontWeight:700}}>Scan Transactions</span></div>
+<button onClick={()=>{setScanMode(false);setScanResults(null);setScanImg(null);setScanPreview(null)}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={16}/></button></div>
+<p style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Upload a receipt, bank statement screenshot, or any image with transactions. AI will extract and categorize them.</p>
+
+{!scanResults?(
+<div>
+<div style={{border:`2px dashed ${T.border}`,borderRadius:12,padding:scanPreview?8:32,textAlign:"center",marginBottom:12,background:T.bg,position:"relative",overflow:"hidden"}}>
+{scanPreview?<img src={scanPreview} alt="Preview" style={{maxWidth:"100%",maxHeight:300,borderRadius:8,display:"block",margin:"0 auto"}}/>:
+<div><Camera size={32} color={T.textDim} style={{marginBottom:8}}/><div style={{fontSize:12,color:T.textDim}}>Drop an image or click to upload</div></div>}
+<input type="file" accept="image/*" onChange={handleImageUpload} ref={fileRef} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}}/></div>
+<div style={{display:"flex",gap:8}}>
+<button onClick={scanImage} disabled={!scanImg||scanLoading} style={{...btnS(T,true),flex:1,justifyContent:"center",opacity:(!scanImg||scanLoading)?.5:1,background:T.purple,color:"#fff"}}>
+{scanLoading?<><Loader size={12} style={{animation:"spin 1s linear infinite"}}/>Analyzing...</>:<><Zap size={12}/>Extract Transactions</>}</button>
+{scanPreview&&<button onClick={()=>{setScanImg(null);setScanPreview(null)}} style={btnS(T,false)}><X size={12}/>Clear</button>}</div>
+{scanError&&<div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:T.dangerBg,color:T.danger,fontSize:12}}>{scanError}</div>}
+</div>
+):(
+<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={pill(T.successBg,T.success)}>✓ Found {scanResults.length} transactions</div>
+<div style={{fontSize:10,color:T.textDim}}>Uncheck any to skip</div></div>
+<div style={{maxHeight:300,overflow:"auto",marginBottom:12}}>
+{scanResults.map((t,i)=>{const cat=cats.find(c=>c.id===t.cat);return(
+<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${T.border}`,opacity:t.selected?1:.4}}>
+<input type="checkbox" checked={t.selected} onChange={()=>setScanResults(p=>p.map((r,j)=>j===i?{...r,selected:!r.selected}:r))} style={{accentColor:T.success}}/>
+<div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{t.desc}</div><div style={{fontSize:10,color:T.textDim}}>{t.date}</div></div>
+<select value={t.cat} onChange={e=>setScanResults(p=>p.map((r,j)=>j===i?{...r,cat:e.target.value}:r))} style={{...inpS(T),width:"auto",fontSize:10,padding:"4px 8px"}}>
+{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select>
+<select value={t.card||"debit"} onChange={e=>setScanResults(p=>p.map((r,j)=>j===i?{...r,card:e.target.value}:r))} style={{...inpS(T),width:"auto",fontSize:10,padding:"4px 8px"}}>
+{Object.entries(CARD_MAP).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+<div style={{fontSize:13,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.danger,minWidth:60,textAlign:"right"}}>{fmt(t.amt)}</div></div>)})}
+</div>
+<div style={{display:"flex",gap:8}}>
+<button onClick={addScanned} style={{...btnS(T,true),flex:1,justifyContent:"center"}}><Check size={12}/>Add {scanResults.filter(t=>t.selected).length} Transactions</button>
+<button onClick={()=>{setScanResults(null);setScanImg(null);setScanPreview(null)}} style={btnS(T,false)}><X size={12}/>Redo</button></div></div>)}</div>}
 
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
@@ -575,7 +653,7 @@ const[authed,setAuthed]=useState(false);const[activeUser,setActiveUser]=useState
 const[months,setMonths]=useState({[curMK]:{txns:SAMPLE_TXNS,budgets:DEFAULT_CATS.map(c=>({...c}))}});
 const[bal,setBal]=useState({sav:313,ira:3194,stk:1376,jnt:49966,inc:5656,fix:1780});
 const[debts,setDebts]=useState(DEBTS_DEFAULT);const[subs,setSubs]=useState(SUBS_DEFAULT);
-const[sideIncome,setSideIncome]=useState(0);
+const[sideIncome,setSideIncome]=useState(0);const[apiKey,setApiKey]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
 
@@ -583,8 +661,8 @@ useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("r
 const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 
 // Load/Save
-useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome)}setLoaded(true)})()},[activeUser]);
-useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome]);
+useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey)}setLoaded(true)})()},[activeUser]);
+useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey]);
 
 const txns=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
@@ -618,7 +696,7 @@ if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?fami
 
 const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}}/>;
-case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo}/>;
+case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo} apiKey={apiKey}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
@@ -644,6 +722,9 @@ case"settings":return(
 <input type="number" value={bal[k]} onChange={e=>setBal(p=>({...p,[k]:+e.target.value}))} style={inpS(T)}/></div>)}</div></div>
 <div style={{marginBottom:20}}><div style={lbl(T)}>Side Income ($/mo)</div>
 <input type="number" value={sideIncome} onChange={e=>setSideIncome(+e.target.value)} style={inpS(T)}/></div>
+<div style={{marginBottom:20}}><div style={lbl(T)}>Anthropic API Key</div>
+<input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={inpS(T)}/>
+<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Required for AI features (transaction scanning, chat). Stored locally per user.</div></div>
 <div><div style={lbl(T)}>Account</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
 <span style={{fontSize:24}}>{USERS.find(u=>u.id===activeUser)?.icon}</span>
@@ -655,6 +736,7 @@ const sW=mob?0:(sideOpen?230:64);
 return(<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Outfit','DM Sans',-apple-system,sans-serif",display:"flex",transition:"background .3s"}}>
 <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 *{scrollbar-width:thin;scrollbar-color:${T.border} transparent}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}
 input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 
