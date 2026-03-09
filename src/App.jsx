@@ -643,7 +643,7 @@ const paidCount=allBills.filter(b=>paidSet.has(b.id)).length;
 const incomeAfterBills=bal.inc-fixedTotal-varCap;
 const[view,setView]=useState("list");const[sort,setSort]=useState("due");
 const[showAdd,setShowAdd]=useState(false);const[newBill,setNewBill]=useState({desc:"",amt:"",cat:"misc",kind:"fixed",group:"",due:1});
-const[editId,setEditId]=useState(null);const[editDesc,setEditDesc]=useState("");const[editAmt,setEditAmt]=useState("");const[editDue,setEditDue]=useState("");
+const[editId,setEditId]=useState(null);const[editDesc,setEditDesc]=useState("");const[editAmt,setEditAmt]=useState("");const[editDue,setEditDue]=useState("");const[editActual,setEditActual]=useState("");
 const[editDueId,setEditDueId]=useState(null);const[editDueVal,setEditDueVal]=useState("");
 const[payPrompt,setPayPrompt]=useState(null);const[payAmt,setPayAmt]=useState("");
 
@@ -674,8 +674,10 @@ if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],d
 const unpay=(bid)=>{const cur=new Set(billsPaid[mo]||[]);cur.delete(bid);setBillsPaid(p=>({...p,[mo]:[...cur]}))};
 const addBill=()=>{if(!newBill.desc||!newBill.amt)return;setRecurring(p=>[...p,{desc:newBill.desc,amt:+newBill.amt,cat:newBill.cat,kind:newBill.kind,group:newBill.group||"Other",due:+newBill.due||0}]);setNewBill({desc:"",amt:"",cat:"misc",kind:"fixed",group:"",due:1});setShowAdd(false)};
 const removeBill=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,st:"cancelled"}:s));else setRecurring(p=>p.filter((_,i)=>i!==b.idx))};
-const startEdit=(b)=>{setEditId(b.id);setEditDesc(b.desc);setEditAmt(String(b.amt));setEditDue(String(b.due||0))};
-const saveEdit=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,n:editDesc||s.n,a:+editAmt||s.a}:s));else setRecurring(p=>p.map((r,i)=>i===b.idx?{...r,desc:editDesc||r.desc,amt:+editAmt||r.amt,due:+editDue}:r));setEditId(null)};
+const startEdit=(b)=>{setEditId(b.id);setEditDesc(b.desc);setEditAmt(String(b.amt));setEditDue(String(b.due||0));setEditActual(moActuals[b.id]!=null?String(moActuals[b.id]):"")};
+const saveEdit=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,n:editDesc||s.n,a:+editAmt||s.a}:s));else setRecurring(p=>p.map((r,i)=>i===b.idx?{...r,desc:editDesc||r.desc,amt:+editAmt||r.amt,due:+editDue}:r));
+if(b.kind==="variable"&&editActual){const ma={...(billActuals[mo]||{})};ma[b.id]=+editActual;setBillActuals(p=>({...p,[mo]:ma}))}
+setEditId(null)};
 
 const dueLabel=(d)=>{if(!d||d===0)return"—";if(d===1)return"1st";if(d===2)return"2nd";if(d===3)return"3rd";return d+"th"};
 const today=new Date().getDate();
@@ -708,9 +710,10 @@ return(<div key={b.id} style={{padding:"10px 0",borderBottom:i<arr.length-1?`1px
 </div></div>
 {isVar?(()=>{const yourAlloc=b.amt;const fullBill=actual!=null?actual:null;const yourShare=fullBill!=null?(sp&&sp.confirmed?fullBill*(1-sp.pct/100):fullBill):null;const over=yourShare!=null?(yourShare-yourAlloc):null;
 return<div style={{display:"grid",gridTemplateColumns:"50px 50px 50px 50px",gap:3,textAlign:"right"}}>
-{isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:50,fontSize:10,padding:"2px 4px",fontFamily:"'Space Mono',monospace"}} title="Edit allocation"/>
+{isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} placeholder="Alloc" style={{...inpS(T),width:50,fontSize:10,padding:"2px 4px",fontFamily:"'Space Mono',monospace",borderColor:T.info}} title="Allocation"/>
 :<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:T.info}} title="Your allocation">{fmt(yourAlloc)}</div>}
-<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:fullBill!=null?T.text:T.textDim}} title="Full bill amount">{fullBill!=null?fmt(fullBill):"—"}</div>
+{isEdit?<input type="number" value={editActual} onChange={e=>setEditActual(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} placeholder="Bill" style={{...inpS(T),width:50,fontSize:10,padding:"2px 4px",fontFamily:"'Space Mono',monospace",borderColor:T.warn}} title="Full bill amount"/>
+:<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:fullBill!=null?T.text:T.textDim}} title="Full bill amount">{fullBill!=null?fmt(fullBill):"—"}</div>}
 <div style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:yourShare!=null?(over>0?T.danger:T.success):T.textDim}} title="Your share after split">{yourShare!=null?fmt(yourShare):"—"}</div>
 {over!=null?<div style={{fontSize:10,fontWeight:700,fontFamily:"'Space Mono',monospace",color:over>0?T.danger:T.success}} title="Variance vs allocation">{over>0?"+":""}{fmt(over)}</div>
 :<div style={{fontSize:10,color:T.textDim}}>—</div>}
@@ -846,6 +849,43 @@ return(<div key={d} style={{marginBottom:10}}>
 <div style={{marginTop:10,fontSize:10,color:T.textDim,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4}}>
 <span>✏️ = edit allocation | Enter full bill amount below → YOURS shows your share after splits</span>
 <span>Annual: <strong style={{color:T.warn}}>{fmt((fixedTotal+varCap)*12)}</strong>/yr</span></div>
+</div>)}
+
+function DebtPage({T,debts,setDebts}){
+const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal===0&&d.status==="paid");
+const totalDebt=active.reduce((s,d)=>s+(d.bal||0),0);
+const payoffs=active.filter(d=>d.minPay>0).map(d=>{const pay=d.minPay;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
+while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:Math.max(0,rem)});rem-=pay;m++;dt.setMonth(dt.getMonth()+1)}
+if(rem<=0)pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:0});
+return{...d,pts,freeDate:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,months:m}});
+return(<div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:14}}>
+<StatCard title="Total Debt" value={fmt(totalDebt)} icon={CreditCard} color={T.warn} T={T}/>
+<StatCard title="Debts Paid" value={`${paid.length}/${debts.length}`} icon={Check} color={T.success} T={T}/>
+<StatCard title="Monthly Payments" value={fmt(active.reduce((s,d)=>s+(d.minPay||0),0))} icon={Calendar} color={T.info} T={T}/></div>
+{payoffs.map(d=>(
+<div key={d.id} style={{...glass(T),marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div><div style={{fontSize:15,fontWeight:700}}>{d.name}</div>
+<div style={{fontSize:11,color:T.textDim}}>{d.rate}% APR • {fmt(d.minPay)}/mo • {d.note||""}</div></div>
+<div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</div>
+<div style={pill(T.infoBg,T.info)}>Free by {d.freeDate}</div></div></div>
+<ResponsiveContainer width="100%" height={120}>
+<AreaChart data={d.pts}><defs><linearGradient id={`dg${d.id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient></defs>
+<CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+<XAxis dataKey="mo" tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} interval={Math.floor(d.pts.length/5)}/>
+<YAxis tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(1)}k`}/>
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v),"Balance"]}/>
+<Area type="monotone" dataKey="rem" stroke={T.warn} strokeWidth={2} fill={`url(#dg${d.id})`}/></AreaChart></ResponsiveContainer></div>))}
+{paid.length>0&&<div style={glass(T)}>
+<div style={lbl(T)}>Eliminated 💀</div>
+<div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+{paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name}</div>)}</div></div>}
+{active.filter(d=>!d.minPay||d.minPay===0).length>0&&<div style={glass(T)}>
+<div style={lbl(T)}>On Hold ⏸️</div>
+{active.filter(d=>!d.minPay||d.minPay===0).map(d=><div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
+<div><span style={{fontWeight:600}}>{d.name}</span><span style={{fontSize:10,color:T.textDim,marginLeft:8}}>{d.note||"No payments"}</span></div>
+<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</span></div>)}</div>}
 </div>)}
 
 function SplitsPage({T,recurring,subs,splits,setSplits,customSplits,setCustomSplits,recurringSplits,setRecurringSplits,mo,billsPaid}){
