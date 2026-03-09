@@ -644,6 +644,7 @@ const incomeAfterBills=bal.inc-fixedTotal-varCap;
 const[view,setView]=useState("list");const[sort,setSort]=useState("due");
 const[showAdd,setShowAdd]=useState(false);const[newBill,setNewBill]=useState({desc:"",amt:"",cat:"misc",kind:"fixed",group:"",due:1});
 const[editId,setEditId]=useState(null);const[editDesc,setEditDesc]=useState("");const[editAmt,setEditAmt]=useState("");const[editDue,setEditDue]=useState("");
+const[editDueId,setEditDueId]=useState(null);const[editDueVal,setEditDueVal]=useState("");
 const[payPrompt,setPayPrompt]=useState(null);const[payAmt,setPayAmt]=useState("");
 
 const sortBills=(bills)=>{const s=[...bills];if(sort==="due")s.sort((a,b)=>(a.due||99)-(b.due||99));
@@ -676,8 +677,9 @@ const removeBill=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.o
 const startEdit=(b)=>{setEditId(b.id);setEditDesc(b.desc);setEditAmt(String(b.amt));setEditDue(String(b.due||0))};
 const saveEdit=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,n:editDesc||s.n,a:+editAmt||s.a}:s));else setRecurring(p=>p.map((r,i)=>i===b.idx?{...r,desc:editDesc||r.desc,amt:+editAmt||r.amt,due:+editDue}:r));setEditId(null)};
 
-const dueLabel=(d)=>{if(!d||d===0)return"Ongoing";if(d===1)return"1st";if(d===2)return"2nd";if(d===3)return"3rd";return d+"th"};
+const dueLabel=(d)=>{if(!d||d===0)return"—";if(d===1)return"1st";if(d===2)return"2nd";if(d===3)return"3rd";return d+"th"};
 const today=new Date().getDate();
+const saveDue=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,due:+editDueVal}:s));else setRecurring(p=>p.map((r,i)=>i===b.idx?{...r,due:+editDueVal}:r));setEditDueId(null)};
 const dueStatus=(d)=>{if(!d||d===0)return{c:T.textDim,l:"flex"};if(paidSet.has(d))return{c:T.success,l:"paid"};return today>=(d?.due||0)?{c:T.warn,l:"due"}:{c:T.textDim,l:"upcoming"}};
 
 const renderRow=(b,i,arr)=>{const paid=paidSet.has(b.id);const isEdit=editId===b.id;const sp=moSplits[b.id];
@@ -686,9 +688,15 @@ const pastDue=b.due&&b.due>0&&today>b.due&&!paid;
 return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",opacity:paid?.5:1,background:pastDue&&!paid?T.dangerBg:"transparent",borderRadius:pastDue?6:0,padding:pastDue?"10px 8px":"10px 0"}}>
 <button onClick={()=>paid?unpay(b.id):payBill(b)} style={{width:24,height:24,borderRadius:6,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
 {paid&&<Check size={11} color="#080c18"/>}</button>
-<div style={{width:36,textAlign:"center",flexShrink:0}}>
+<div style={{width:40,textAlign:"center",flexShrink:0}}>
+{editDueId===b.id?(
+<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+<input type="number" min={0} max={31} value={editDueVal} onChange={e=>setEditDueVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveDue(b);if(e.key==="Escape")setEditDueId(null)}} onBlur={()=>saveDue(b)} style={{...inpS(T),width:36,fontSize:11,padding:"2px 4px",textAlign:"center"}} autoFocus/></div>
+):(
+<div onClick={()=>{setEditDueId(b.id);setEditDueVal(String(b.due||0))}} style={{cursor:"pointer",padding:"2px 0",borderRadius:6,background:b.due>0?"transparent":T.border+"30"}} title="Click to set due date">
 {b.due>0?<div style={{fontSize:11,fontWeight:700,color:paid?T.textDim:pastDue?T.danger:T.textMuted}}>{dueLabel(b.due)}</div>
-:<div style={{fontSize:9,color:T.textDim}}>—</div>}</div>
+:<div style={{fontSize:9,color:T.textDim}}>+ date</div>}</div>
+)}</div>
 <div style={{flex:1,minWidth:0}}>
 {isEdit?<input value={editDesc} onChange={e=>setEditDesc(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),fontSize:12,padding:"3px 6px"}} autoFocus/>
 :<div style={{fontSize:12,fontWeight:600,textDecoration:paid?"line-through":"none"}}>{b.desc}</div>}
@@ -697,11 +705,12 @@ return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:8,padding:
 {b.group&&<span style={{fontSize:9,color:T.textDim}}>{b.group}</span>}
 {sp&&sp.confirmed&&<span style={pill(T.purpleBg,T.purple)}>Split</span>}
 </div></div>
-{isVar?(<div style={{display:"grid",gridTemplateColumns:"55px 55px 50px",gap:2,textAlign:"right"}}>
+{isVar?(<div style={{display:"grid",gridTemplateColumns:"55px 55px 55px",gap:2,textAlign:"right"}}>
 {isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:55,fontSize:10,padding:"2px 4px",fontFamily:"'Space Mono',monospace"}}/>
-:<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(b.amt)}</div>}
-<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:actual!=null?(actual>b.amt?T.danger:T.success):T.textDim}}>{actual!=null?fmt(actual):"—"}</div>
-{variance!=null?<div style={{fontSize:10,fontFamily:"'Space Mono',monospace",color:variance>0?T.danger:T.success}}>{variance>0?"+":""}{fmt(variance)}</div>
+:<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:T.info}} title="Your allocation">{fmt(sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt)}</div>}
+<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:actual!=null?(()=>{const yourActual=sp&&sp.confirmed?actual*(1-sp.pct/100):actual;const yourBudget=sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt;return yourActual>yourBudget?T.danger:T.success})():T.textDim}} title="Actual cost (your share)">{actual!=null?fmt(sp&&sp.confirmed?actual*(1-sp.pct/100):actual):"—"}</div>
+{actual!=null?(()=>{const yourActual=sp&&sp.confirmed?actual*(1-sp.pct/100):actual;const yourBudget=sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt;const v=yourActual-yourBudget;
+return<div style={{fontSize:10,fontFamily:"'Space Mono',monospace",color:v>0?T.danger:T.success}} title="Variance">{v>0?"+":""}{fmt(v)}</div>})()
 :<div style={{fontSize:10,color:T.textDim}}>—</div>}
 </div>):(<div style={{textAlign:"right",minWidth:70}}>
 {isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:70,fontSize:12,padding:"3px 6px",fontFamily:"'Space Mono',monospace"}}/>
@@ -718,14 +727,18 @@ return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:8,padding:
 
 return(<div>
 {payPrompt&&<Modal onClose={()=>setPayPrompt(null)} T={T}>
-<div style={{fontSize:16,fontWeight:700,marginBottom:12}}>How much was {payPrompt.desc}?</div>
-<div style={{fontSize:11,color:T.textDim,marginBottom:12}}>Budget: {fmt(payPrompt.amt)} — enter actual</div>
+<div style={{fontSize:16,fontWeight:700,marginBottom:12}}>How much was {payPrompt.desc} this month?</div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Your allocation: {fmt(payPrompt.amt)}</div>
+{moSplits[payPrompt.id]&&moSplits[payPrompt.id].confirmed&&<div style={{fontSize:11,color:T.purple,marginBottom:4}}>Split {moSplits[payPrompt.id].pct}% with Sarah — enter the FULL bill amount, split is auto-calculated</div>}
+<div style={{fontSize:11,color:T.textDim,marginBottom:12}}>Enter the total amount on the bill</div>
 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16}}>
 <span style={{fontSize:16,color:T.textDim}}>$</span>
 <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} onKeyDown={e=>e.key==="Enter"&&confirmPayActual()} style={{...inpS(T),fontSize:20,fontFamily:"'Space Mono',monospace",padding:"10px 14px"}} autoFocus/></div>
-{+payAmt!==payPrompt.amt&&<div style={{fontSize:12,marginBottom:12,color:+payAmt>payPrompt.amt?T.danger:T.success,fontWeight:600}}>
-{+payAmt>payPrompt.amt?`+${fmt(+payAmt-payPrompt.amt)} over`:`${fmt(payPrompt.amt-+payAmt)} under`}</div>}
-<button onClick={confirmPayActual} style={{...btnS(T,true),width:"100%",justifyContent:"center"}}><Check size={12}/>Mark Paid — {fmt(+payAmt)}</button></Modal>}
+{+payAmt!==payPrompt.amt&&(()=>{const sp2=moSplits[payPrompt.id];const yourAmt=sp2&&sp2.confirmed?+payAmt*(1-sp2.pct/100):+payAmt;const yourAlloc=sp2&&sp2.confirmed?payPrompt.amt*(1-sp2.pct/100):payPrompt.amt;const diff=yourAmt-yourAlloc;
+return<div style={{fontSize:12,marginBottom:12}}>
+{sp2&&sp2.confirmed&&<div style={{color:T.purple,marginBottom:4}}>Your share ({100-sp2.pct}%): {fmt(yourAmt)} of {fmt(+payAmt)}</div>}
+<div style={{color:diff>0?T.danger:T.success,fontWeight:600}}>{diff>0?`+${fmt(diff)} over your allocation`:`${fmt(Math.abs(diff))} under your allocation`}</div></div>})()}
+<button onClick={confirmPayActual} style={{...btnS(T,true),width:"100%",justifyContent:"center"}}><Check size={12}/>Mark Paid — {fmt(moSplits[payPrompt.id]&&moSplits[payPrompt.id].confirmed?+payAmt*(1-moSplits[payPrompt.id].pct/100):+payAmt)} (your share)</button></Modal>}
 
 <div style={{...glass(T),marginBottom:14}}>
 <div style={lbl(T)}>Paycheck Breakdown</div>
@@ -777,12 +790,13 @@ return(<div>
 <div style={lbl(T)}>Variable Bills</div>
 <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:9,color:T.textDim}}>Cap: $</span>
 <input type="number" value={varCap} onChange={e=>setVarCap(+e.target.value)} style={{...inpS(T),width:60,fontSize:11,padding:"3px 6px",fontWeight:700}}/></div></div>
-{varBills.length>0&&<div style={{display:"grid",gridTemplateColumns:"24px 36px 1fr 55px 55px 50px auto",gap:2,padding:"4px 0",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-<div/><div/><div/><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>BUDGET</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>ACTUAL</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>+/-</div><div/></div>}
+{varBills.length>0&&<div style={{display:"grid",gridTemplateColumns:"24px 36px 1fr 55px 55px 55px auto",gap:2,padding:"4px 0",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
+<div/><div/><div/><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>ALLOC</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>ACTUAL</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>+/-</div><div/></div>}
 {sortBills(varBills).map((b,i)=>renderRow(b,i,varBills))}
-{varActual>0&&<div style={{borderTop:`1px solid ${T.border}`,padding:"8px 0 0",marginTop:4,display:"flex",justifyContent:"space-between",fontSize:11}}>
-<span style={{fontWeight:700}}>Totals</span>
-<span>Budget: <strong style={{color:T.info}}>{fmt(varBudget)}</strong> | Actual: <strong style={{color:varActual>varCap?T.danger:T.success}}>{fmt(varActual)}</strong> | Cap: <strong>{fmt(varCap)}</strong></span></div>}
+{varActual>0&&<div style={{borderTop:`1px solid ${T.border}`,padding:"8px 0 0",marginTop:4,fontSize:10}}>
+<div style={{display:"flex",justifyContent:"space-between"}}>
+<span style={{fontWeight:700}}>Your totals (after splits)</span>
+<span>Alloc: <strong style={{color:T.info}}>{fmt(varBills.reduce((s,b)=>{const sp2=moSplits[b.id];return s+(sp2&&sp2.confirmed?b.amt*(1-sp2.pct/100):b.amt)},0))}</strong> | Actual: <strong style={{color:varActual>varCap?T.danger:T.success}}>{fmt(varBills.reduce((s,b)=>{const a=moActuals[b.id];const sp2=moSplits[b.id];if(a==null)return s;return s+(sp2&&sp2.confirmed?a*(1-sp2.pct/100):a)},0))}</strong> | Cap: <strong>{fmt(varCap)}</strong></span></div></div>}
 </div></>}
 
 {view==="group"&&<div style={glass(T)}>
@@ -806,8 +820,8 @@ return(<div key={d} style={{marginBottom:10}}>
 <div style={{padding:"4px 0",borderBottom:`1px solid ${T.border}`,fontSize:11,color:T.textMuted}}>Ongoing / No fixed date</div>
 {sortBills(allBills.filter(b=>!b.due||b.due===0)).map((b,i,arr)=>renderRow(b,i,arr))}</div>}</div>}
 
-<div style={{marginTop:10,fontSize:10,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
-<span>Variable bills prompt for actual amount when paid</span>
+<div style={{marginTop:10,fontSize:10,color:T.textDim,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4}}>
+<span>Variable: edit pencil = change allocation | checkmark = enter actual cost | splits show your share only</span>
 <span>Annual: <strong style={{color:T.warn}}>{fmt((fixedTotal+varCap)*12)}</strong>/yr</span></div>
 </div>)}
 
