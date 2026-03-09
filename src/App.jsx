@@ -721,7 +721,7 @@ return<div style={{fontSize:10,fontFamily:"'Space Mono',monospace",color:v>0?T.d
 {isEdit?(<><button onClick={()=>saveEdit(b)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",padding:2}}><Check size={11}/></button>
 <button onClick={()=>setEditId(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2}}><X size={11}/></button></>
 ):(<>{!paid&&<button onClick={()=>startEdit(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2,opacity:.3}}><Edit3 size={10}/></button>}
-<button onClick={()=>toggleSplit(b.id)} style={{background:"none",border:"none",color:sp?T.purple:T.textDim,cursor:"pointer",padding:2,opacity:sp?1:.2}}><User size={10}/></button>
+<button onClick={()=>toggleSplit(b.id)} style={{background:sp?T.purpleBg:"none",border:sp?`1px solid ${T.purple}40`:"1px solid transparent",color:sp?T.purple:T.textMuted,cursor:"pointer",padding:"2px 5px",borderRadius:6,fontSize:11,opacity:sp?1:.6}} title={sp?"Remove split":"Split with Sarah"}>👥</button>
 <button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2,opacity:.2}}><Trash2 size={10}/></button></>)}</div>
 </div>)};
 
