@@ -742,7 +742,7 @@ return(<div key={b.id} style={{padding:"12px 0",borderBottom:i<allBills.length-1
 <div style={{display:"flex",gap:6,marginTop:6}}>
 {sp.confirmed?(<><div style={pill(T.successBg,T.success)}>✓ Split confirmed</div>
 <button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:false};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,false),fontSize:9,padding:"3px 8px"}}>Edit</button></>
-):(<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:10,padding:"5px 12px",background:T.purple,color:"#fff"}}><Check size={10}/>Confirm Split — Greg {fmt(b.amt*(1-sp.pct/100))} / Sarah {fmt(b.amt*sp.pct/100)}</button>)}</div></div>}
+):(<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:10,padding:"5px 12px",background:T.purple,color:"#fff"}}><Check size={10}/>Confirm Split — Greg {fmt(b.amt*(1-sp.pct/100))} / Sarah {fmt(b.amt*sp.pct/100)}</button>)}</div></div>}
 </div>)})}
 </div>
 
@@ -758,58 +758,85 @@ return(<div key={b.id} style={{padding:"12px 0",borderBottom:i<allBills.length-1
 <span>Annual: <strong style={{color:T.warn}}>{fmt(totalAmt*12)}</strong>/yr</span></div>
 </div>)}
 
-function SplitsPage({T,recurring,subs,splits,mo,billsPaid}){
+function SplitsPage({T,recurring,subs,splits,setSplits,mo,billsPaid}){
 const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,desc:r.desc,amt:r.amt,cat:r.cat,type:"bill"})),
 ...subs.filter(s=>s.st==="active").map((s,i)=>({id:`s_${i}`,desc:s.n,amt:s.a,cat:s.cat,type:"sub"}))];
 const moSplits=splits[mo]||{};const paidSet=new Set(billsPaid[mo]||[]);
 const splitBills=allBills.filter(b=>moSplits[b.id]&&moSplits[b.id].confirmed);
 const sarahTotal=splitBills.reduce((s,b)=>s+b.amt*(moSplits[b.id].pct/100),0);
 const gregTotal=splitBills.reduce((s,b)=>s+b.amt*(1-moSplits[b.id].pct/100),0);
+const settledAmt=splitBills.filter(b=>moSplits[b.id].settled).reduce((s,b)=>s+b.amt*(moSplits[b.id].pct/100),0);
+const unsettled=sarahTotal-settledAmt;
+
+const toggleSettled=(bid)=>{const ms={...moSplits};ms[bid]={...ms[bid],settled:!ms[bid].settled,settledDate:!ms[bid].settled?new Date().toISOString().split("T")[0]:null};setSplits(p=>({...p,[mo]:ms}))};
+
+const copySummary=()=>{const lines=splitBills.map(b=>{const sp=moSplits[b.id];return`${b.desc}: ${fmt(b.amt*sp.pct/100)} (${sp.pct}% of ${fmt(b.amt)})`});
+const txt=`Hey Sarah! Here's your share for ${mo}:\n\n${lines.join("\n")}\n\nTotal: ${fmt(sarahTotal)}\n${settledAmt>0?`Settled: ${fmt(settledAmt)}\nRemaining: ${fmt(unsettled)}`:""}`;
+navigator.clipboard?.writeText(txt);};
+
 const allMonths=Object.keys(splits).filter(m=>Object.values(splits[m]||{}).some(s=>s.confirmed)).sort();
 const historicalSarah=allMonths.map(m=>{const ms=splits[m]||{};const bills=[...recurring.map((r,i)=>({id:`r_${i}`,amt:r.amt})),...subs.filter(s=>s.st==="active").map((s,i)=>({id:`s_${i}`,amt:s.a}))];
-return{name:m,amt:bills.filter(b=>ms[b.id]&&ms[b.id].confirmed).reduce((s,b)=>s+b.amt*(ms[b.id].pct/100),0)}});
+const total=bills.filter(b=>ms[b.id]&&ms[b.id].confirmed).reduce((s,b)=>s+b.amt*(ms[b.id].pct/100),0);
+const settled=bills.filter(b=>ms[b.id]&&ms[b.id].settled).reduce((s,b)=>s+b.amt*(ms[b.id].pct/100),0);
+return{name:m,owed:total,settled}});
 
 return(<div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:14}}>
-<StatCard title="Sarah Owes" value={fmt(sarahTotal)} icon={User} color={T.purple} T={T} subtitle={`${splitBills.length} split bills`}/>
-<StatCard title="Greg's Share" value={fmt(gregTotal)} icon={User} color={T.success} T={T}/>
-<StatCard title="Total Split" value={fmt(sarahTotal+gregTotal)} icon={DollarSign} color={T.info} T={T}/></div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14}}>
+<StatCard title="Sarah Owes" value={fmt(sarahTotal)} icon={User} color={T.purple} T={T} subtitle={`${splitBills.length} bills`}/>
+<StatCard title="Settled" value={fmt(settledAmt)} icon={Check} color={T.success} T={T} subtitle={`${splitBills.filter(b=>moSplits[b.id].settled).length} of ${splitBills.length}`}/>
+<StatCard title="Unsettled" value={fmt(unsettled)} icon={Clock} color={unsettled>0?T.warn:T.success} T={T} subtitle={unsettled<=0?"All clear!":"Pending"}/>
+<StatCard title="Greg's Share" value={fmt(gregTotal)} icon={DollarSign} color={T.info} T={T}/></div>
 
 {splitBills.length===0?(<div style={{...glass(T),textAlign:"center",padding:40}}>
 <User size={32} color={T.textDim} style={{marginBottom:12}}/>
 <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>No confirmed splits for {mo}</div>
-<div style={{fontSize:12,color:T.textMuted}}>Go to Bills → click 👥 on a bill → adjust slider → Confirm Split</div></div>
+<div style={{fontSize:12,color:T.textMuted}}>Go to Bills → click 👥 → adjust slider → Confirm Split</div></div>
 ):(
 <div style={glass(T)}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
 <div style={lbl(T)}>Sarah's Share — {mo}</div>
-<div style={pill(T.purpleBg,T.purple)}>🌸 {splitBills.length} items</div></div>
+<div style={{display:"flex",gap:6}}>
+<button onClick={copySummary} style={btnS(T,false)}><Send size={11}/>Copy for Sarah</button>
+<div style={pill(T.purpleBg,T.purple)}>🌸 {splitBills.length} items</div></div></div>
 <table style={{width:"100%",borderCollapse:"collapse"}}>
 <thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
-{["Bill","Category","Split","Sarah Owes","Greg Pays","Status"].map((h,i)=><th key={i} style={{textAlign:i>=3?"right":"left",padding:"10px 12px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
-<tbody>{splitBills.map((b,i)=>{const sp=moSplits[b.id];const paid=paidSet.has(b.id);const sarahAmt=b.amt*sp.pct/100;const gregAmt=b.amt*(1-sp.pct/100);
-return(<tr key={b.id} style={{borderBottom:`1px solid ${T.border}`}}>
-<td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{b.desc}</td>
-<td style={{padding:"10px 12px"}}><span style={pill(T.infoBg,T.info)}>{b.type==="bill"?"📋":"🔄"} {b.cat}</span></td>
-<td style={{padding:"10px 12px"}}><span style={pill(T.purpleBg,T.purple)}>{sp.pct}% / {100-sp.pct}%</span></td>
-<td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(sarahAmt)}</td>
-<td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(gregAmt)}</td>
-<td style={{padding:"10px 12px",textAlign:"right"}}><span style={pill(paid?T.successBg:T.warnBg,paid?T.success:T.warn)}>{paid?"Paid":"Due"}</span></td>
+{["","Date","Bill","Split","Sarah Owes","Greg Pays","Settled"].map((h,i)=><th key={i} style={{textAlign:i>=4?"right":"left",padding:"10px 10px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
+<tbody>{splitBills.map((b,i)=>{const sp=moSplits[b.id];const sarahAmt=b.amt*sp.pct/100;const gregAmt=b.amt*(1-sp.pct/100);
+return(<tr key={b.id} style={{borderBottom:`1px solid ${T.border}`,opacity:sp.settled?.6:1}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+<td style={{padding:"10px 6px",width:36}}>
+<button onClick={()=>toggleSettled(b.id)} style={{width:24,height:24,borderRadius:6,border:`2px solid ${sp.settled?T.success:T.border}`,background:sp.settled?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+{sp.settled&&<Check size={12} color="#080c18"/>}</button></td>
+<td style={{padding:"10px 10px",fontSize:11,color:T.textDim}}>{sp.date||"—"}</td>
+<td style={{padding:"10px 10px"}}><div style={{fontSize:13,fontWeight:600,textDecoration:sp.settled?"line-through":"none"}}>{b.desc}</div>
+<span style={pill(b.type==="bill"?T.infoBg:T.purpleBg,b.type==="bill"?T.info:T.purple)}>{b.type==="bill"?"📋":"🔄"} {b.cat}</span></td>
+<td style={{padding:"10px 10px"}}><span style={pill(T.purpleBg,T.purple)}>{sp.pct}%</span></td>
+<td style={{padding:"10px 10px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(sarahAmt)}</td>
+<td style={{padding:"10px 10px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(gregAmt)}</td>
+<td style={{padding:"10px 10px",textAlign:"right"}}>
+{sp.settled?<div><span style={pill(T.successBg,T.success)}>✓ Settled</span>
+{sp.settledDate&&<div style={{fontSize:9,color:T.textDim,marginTop:2}}>{sp.settledDate}</div>}</div>
+:<span style={pill(T.warnBg,T.warn)}>Unpaid</span>}</td>
 </tr>)})}</tbody></table>
-<div style={{borderTop:`2px solid ${T.border}`,padding:"12px 12px 0",display:"flex",justifyContent:"flex-end",gap:24}}>
+<div style={{borderTop:`2px solid ${T.border}`,padding:"12px 10px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div>{unsettled>0&&<div style={{fontSize:12,color:T.warn,fontWeight:600}}>Sarah still owes {fmt(unsettled)}</div>}
+{unsettled<=0&&sarahTotal>0&&<div style={{fontSize:12,color:T.success,fontWeight:600}}>✓ All settled for {mo}!</div>}</div>
+<div style={{display:"flex",gap:20}}>
 <div style={{textAlign:"right"}}><div style={{fontSize:9,color:T.textDim,textTransform:"uppercase",letterSpacing:1}}>Sarah Total</div>
 <div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(sarahTotal)}</div></div>
 <div style={{textAlign:"right"}}><div style={{fontSize:9,color:T.textDim,textTransform:"uppercase",letterSpacing:1}}>Greg Total</div>
-<div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(gregTotal)}</div></div></div></div>)}
+<div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(gregTotal)}</div></div></div></div></div>)}
 
-{historicalSarah.length>1&&<div style={{...glass(T),marginTop:14}}>
-<div style={lbl(T)}>Sarah's Monthly Splits</div>
+{historicalSarah.length>0&&<div style={{...glass(T),marginTop:14}}>
+<div style={lbl(T)}>Split History</div>
 <ResponsiveContainer width="100%" height={150}>
 <BarChart data={historicalSarah}><CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
 <XAxis dataKey="name" tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
 <YAxis tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${v}`}/>
-<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v),"Sarah"]}/>
-<Bar dataKey="amt" fill={T.purple} radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div>}
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v)]}/>
+<Bar dataKey="owed" fill={T.purple} name="Owed" radius={[4,4,0,0]}/><Bar dataKey="settled" fill={T.success} name="Settled" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer>
+<div style={{display:"flex",gap:12,justifyContent:"center",marginTop:6}}>
+<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:T.textMuted}}><div style={{width:8,height:8,borderRadius:2,background:T.purple}}/>Owed</div>
+<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:T.textMuted}}><div style={{width:8,height:8,borderRadius:2,background:T.success}}/>Settled</div></div></div>}
 </div>)}
 
 function SavingsPage({T,bal,cur}){
@@ -1156,7 +1183,7 @@ case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} to
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
 case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart}/>;
-case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} mo={mo} billsPaid={billsPaid}/>;
+case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} mo={mo} billsPaid={billsPaid}/>;
 case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
 case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
 case"report":return<ReportPage T={T} cats={cats} byCat={byCat} totS={totS} totB={totB} savR={savR}/>;
