@@ -652,7 +652,7 @@ return(<div>
 <div><span style={{fontWeight:600}}>{d.name}</span><span style={{fontSize:10,color:T.textDim,marginLeft:8}}>{d.note||"No payments"}</span></div>
 <span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</span></div>)}</div>}</div>)}
 
-function BillsPage({T,recurring,setRecurring,subs,setSubs,billsPaid,setBillsPaid,billActuals,setBillActuals,splits,setSplits,mo,addTxnsSmart,bal}){
+function BillsPage({T,recurring,setRecurring,subs,setSubs,billsPaid,setBillsPaid,billActuals,setBillActuals,splits,setSplits,mo,addTxnsSmart,bal,varCap,setVarCap}){
 const fixed=recurring.filter(r=>r.kind!=="variable");const variable=recurring.filter(r=>r.kind==="variable");
 const activeSubs=subs.filter(s=>s.st==="active");
 const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,idx:i,...r})),...activeSubs.map((s,i)=>({id:`s_${i}`,idx:i,desc:s.n,amt:s.a,cat:s.cat,type:"sub",kind:"fixed",group:"Subscriptions",src:"subscription",origIdx:subs.indexOf(s)}))];
@@ -754,12 +754,12 @@ return(<div>
 <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{paidCount}/{allBills.length}</div></div>
 <div style={{fontSize:9,color:T.textDim}}>paid</div></div>
 <StatCard title="Fixed" value={fmt(fixedTotal)} icon={Lock} color={T.info} T={T} subtitle={fixedBills.length+" bills"}/>
-<StatCard title="Variable" value={fmt(varBudget)} icon={Activity} color={T.warn} T={T} subtitle={varActual>0?"Actual: "+fmt(varActual):"Budgeted"}/>
-{varActual>0&&<StatCard title="Variance" value={(varVariance>=0?"+":"")+fmt(varVariance)} icon={varVariance>0?TrendingUp:TrendingDown} color={varVariance>0?T.danger:T.success} T={T} subtitle={varVariance>0?"Over budget":"Under budget"}/>}
+<StatCard title="Variable Cap" value={fmt(varCap)} icon={Activity} color={T.warn} T={T} subtitle={varActual>0?"Actual: "+fmt(varActual):"Allocated: "+fmt(varBudget)}/>
+{varActual>0&&<StatCard title="Variance" value={(varActual-varCap>=0?"+":"")+fmt(varActual-varCap)} icon={varActual>varCap?TrendingUp:TrendingDown} color={varActual>varCap?T.danger:T.success} T={T} subtitle={varActual>varCap?"Spills into budget":"Under cap"}/>}
 {sarahTotal>0&&<StatCard title="Sarah" value={fmt(sarahTotal)} icon={User} color={T.purple} T={T}/>}</div>
 
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-<div style={{fontSize:11,color:T.textDim}}>Total allocated: <strong style={{color:T.text}}>{fmt(fixedTotal+varBudget)}</strong>/mo from {fmt(bal.inc)} income</div>
+<div style={{fontSize:11,color:T.textDim}}>Total allocated: <strong style={{color:T.text}}>{fmt(fixedTotal+varCap)}</strong>/mo from {fmt(bal.inc)} income — <span style={{color:T.success}}>{fmt(bal.inc-fixedTotal-varCap)}</span> left for spending</div>
 <button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={11}/>Add</button></div>
 
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
@@ -779,15 +779,60 @@ return(<div>
 {bills.map((b,i)=>renderBill(b,i,bills))}</div>))}</div>
 
 <div style={{...glass(T),marginTop:14}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-<div style={lbl(T)}>Variable Bills — Budget {fmt(varBudget)}/mo</div>
-{varActual>0&&<div style={pill(varVariance>0?T.dangerBg:T.successBg,varVariance>0?T.danger:T.success)}>Actual: {fmt(varActual)} ({varVariance>=0?"+":""}{fmt(varVariance)})</div>}</div>
-{varBills.map((b,i)=>renderBill(b,i,varBills))}
-{varBills.length===0&&<div style={{padding:20,textAlign:"center",color:T.textDim,fontSize:12}}>No variable bills yet</div>}</div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+<div style={lbl(T)}>Variable Bills</div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<span style={{fontSize:10,color:T.textDim}}>Monthly cap:</span>
+<span style={{fontSize:10,color:T.textDim}}>$</span>
+<input type="number" value={varCap} onChange={e=>setVarCap(+e.target.value)} style={{...inpS(T),width:70,fontSize:12,padding:"4px 8px",fontFamily:"'Space Mono',monospace",fontWeight:700}}/>
+</div></div>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.textDim,padding:"6px 0",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
+<span>Allocated from cap: {fmt(varBudget)} of {fmt(varCap)} ({varCap>0?(varBudget/varCap*100).toFixed(0):0}%)</span>
+{varActual>0&&<span>Actual total: <strong style={{color:varActual>varCap?T.danger:T.success}}>{fmt(varActual)}</strong> {varActual>varCap?<span style={{color:T.danger}}>⚠️ {fmt(varActual-varCap)} over cap → spills into budget</span>:<span style={{color:T.success}}>✓ under cap</span>}</span>}
+</div>
+{varBills.map((b,i)=>{const paid=paidSet.has(b.id);const actual=moActuals[b.id];const hasActual=actual!=null;const variance=hasActual?(actual-b.amt):null;
+return(<div key={b.id} style={{padding:"10px 0",borderBottom:i<varBills.length-1?`1px solid ${T.border}`:"none",opacity:paid?.55:1}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<button onClick={()=>paid?unpay(b.id):payBill(b)} style={{width:26,height:26,borderRadius:7,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+{paid&&<Check size={12} color="#080c18"/>}</button>
+<div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,textDecoration:paid?"line-through":"none"}}>{b.desc}</div>
+<div style={{display:"flex",gap:4,marginTop:2}}>
+<span style={pill(T.warnBg,T.warn)}>{b.group||"Variable"}</span>
+{moSplits[b.id]&&moSplits[b.id].confirmed&&<span style={pill(T.purpleBg,T.purple)}>Split {moSplits[b.id].pct}%</span>}
+</div></div>
+<div style={{display:"grid",gridTemplateColumns:"70px 70px 60px",gap:4,textAlign:"right",fontSize:10}}>
+<div><div style={{color:T.textDim,fontSize:8,marginBottom:1}}>BUDGET</div>
+<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(b.amt)}</div></div>
+<div><div style={{color:T.textDim,fontSize:8,marginBottom:1}}>ACTUAL</div>
+{hasActual?<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:actual>b.amt?T.danger:T.success}}>{fmt(actual)}</div>
+:<div style={{color:T.textDim}}>—</div>}</div>
+<div><div style={{color:T.textDim,fontSize:8,marginBottom:1}}>+/-</div>
+{variance!=null?<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:variance>0?T.danger:T.success,fontSize:11}}>{variance>0?"+":""}{fmt(variance)}</div>
+:<div style={{color:T.textDim}}>—</div>}</div></div>
+<div style={pill(paid?T.successBg:T.warnBg,paid?T.success:T.warn)}>{paid?"Paid":"Due"}</div>
+<div style={{display:"flex",gap:1}}>
+{!paid&&<button onClick={()=>startEdit(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:3,opacity:.4}}><Edit3 size={11}/></button>}
+<button onClick={()=>toggleSplit(b.id)} style={{background:"none",border:"none",color:moSplits[b.id]?T.purple:T.textDim,cursor:"pointer",padding:3,opacity:moSplits[b.id]?1:.3}}>👥</button>
+<button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:3,opacity:.3}}><Trash2 size={11}/></button>
+</div></div>
+{moSplits[b.id]&&!paid&&!moSplits[b.id].confirmed&&<div style={{marginLeft:34,marginTop:4,padding:"6px 10px",background:T.purpleBg,borderRadius:8}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<span style={{fontSize:9,color:T.purple,fontWeight:600}}>Sarah:</span>
+<input type="range" min={10} max={90} step={5} value={moSplits[b.id].pct} onChange={e=>setSplitPct(b.id,e.target.value)} style={{flex:1,accentColor:T.purple}}/>
+<span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{moSplits[b.id].pct}%</span></div>
+<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"3px 10px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm</button></div>}
+</div>)})}
+{varBills.length===0&&<div style={{padding:20,textAlign:"center",color:T.textDim,fontSize:12}}>No variable bills</div>}
+<div style={{borderTop:`1px solid ${T.border}`,padding:"8px 0 0",marginTop:4,display:"grid",gridTemplateColumns:"1fr 70px 70px 60px 1fr",gap:4,textAlign:"right",fontSize:11}}>
+<div style={{textAlign:"left",fontWeight:700}}>Totals</div>
+<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(varBudget)}</div>
+<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:varActual>varCap?T.danger:T.success}}>{varActual>0?fmt(varActual):"—"}</div>
+<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:varVariance>0?T.danger:T.success}}>{varActual>0?(varVariance>0?"+":"")+fmt(varVariance):"—"}</div>
+<div></div></div></div>
 
 <div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
 <span>Variable bills prompt for actual amount when paid</span>
-<span>Annual: <strong style={{color:T.warn}}>{fmt((fixedTotal+varBudget)*12)}</strong>/yr</span></div>
+<span>Annual: <strong style={{color:T.warn}}>{fmt((fixedTotal+varCap)*12)}</strong>/yr</span></div>
 </div>)}
 
 function SplitsPage({T,recurring,subs,splits,setSplits,customSplits,setCustomSplits,recurringSplits,setRecurringSplits,mo,billsPaid}){
@@ -1185,6 +1230,7 @@ const[billActuals,setBillActuals]=useState({});
 const[splits,setSplits]=useState({});
 const[customSplits,setCustomSplits]=useState({});
 const[recurringSplits,setRecurringSplits]=useState([]);
+const[varCap,setVarCap]=useState(690);
 const[qa,setQa]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
@@ -1193,8 +1239,8 @@ useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("r
 const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 
 // Load/Save
-useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits)}setLoaded(true)})()},[activeUser]);
-useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits]);
+useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap)}setLoaded(true)})()},[activeUser]);
+useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap]);
 
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const billNames=useMemo(()=>{const names=new Set();recurring.forEach(r=>names.add(r.desc.toLowerCase()));subs.forEach(s=>{if(s.n)names.add(s.n.toLowerCase())});return names},[recurring,subs]);
@@ -1272,7 +1318,7 @@ case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTx
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
-case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal}/>;
+case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal} varCap={varCap} setVarCap={setVarCap}/>;
 case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} customSplits={customSplits} setCustomSplits={setCustomSplits} recurringSplits={recurringSplits} setRecurringSplits={setRecurringSplits} mo={mo} billsPaid={billsPaid}/>;
 case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
 case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
