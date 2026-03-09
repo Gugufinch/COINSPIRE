@@ -723,6 +723,25 @@ return<div style={{fontSize:10,fontFamily:"'Space Mono',monospace",color:v>0?T.d
 ):(<>{!paid&&<button onClick={()=>startEdit(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2,opacity:.3}}><Edit3 size={10}/></button>}
 <button onClick={()=>toggleSplit(b.id)} style={{background:sp?T.purpleBg:"none",border:sp?`1px solid ${T.purple}40`:"1px solid transparent",color:sp?T.purple:T.textMuted,cursor:"pointer",padding:"2px 5px",borderRadius:6,fontSize:11,opacity:sp?1:.6}} title={sp?"Remove split":"Split with Sarah"}>👥</button>
 <button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2,opacity:.2}}><Trash2 size={10}/></button></>)}</div>
+</div>
+{/* Split slider - unconfirmed */}
+{sp&&!paid&&!sp.confirmed&&<div style={{marginLeft:34,marginTop:4,padding:"8px 10px",background:T.purpleBg,borderRadius:8,animation:"fadeUp .2s ease"}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<span style={{fontSize:9,color:T.purple,fontWeight:600}}>Sarah pays:</span>
+<input type="range" min={10} max={90} step={5} value={sp.pct} onChange={e=>setSplitPct(b.id,e.target.value)} style={{flex:1,accentColor:T.purple}}/>
+<span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{sp.pct}%</span>
+<span style={{fontSize:9,color:T.textDim}}>= {fmt(b.amt*sp.pct/100)}</span></div>
+<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"4px 12px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm — Greg {fmt(b.amt*(1-sp.pct/100))} / Sarah {fmt(b.amt*sp.pct/100)}</button></div>}
+{/* Split confirmed badge */}
+{sp&&sp.confirmed&&!paid&&<div style={{marginLeft:34,marginTop:3,display:"flex",gap:6,alignItems:"center"}}>
+<span style={pill(T.successBg,T.success)}>✓ Split {sp.pct}% confirmed</span>
+<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:false};setSplits(p=>({...p,[mo]:ms}))}} style={{fontSize:9,color:T.textDim,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>edit</button></div>}
+{/* Variable bill: inline actual entry when not yet paid */}
+{isVar&&!paid&&!moActuals[b.id]&&<div style={{marginLeft:34,marginTop:4,display:"flex",alignItems:"center",gap:6}}>
+<span style={{fontSize:9,color:T.textDim}}>Log actual:</span>
+<span style={{fontSize:10,color:T.textDim}}>$</span>
+<input type="number" placeholder={String(b.amt)} onKeyDown={e=>{if(e.key==="Enter"&&e.target.value){const ma={...(billActuals[mo]||{})};ma[b.id]=+e.target.value;setBillActuals(p=>({...p,[mo]:ma}))}}} style={{...inpS(T),width:70,fontSize:11,padding:"3px 6px",fontFamily:"'Space Mono',monospace"}}/>
+<span style={{fontSize:9,color:T.textDim}}>Enter to save</span></div>}
 </div>)};
 
 return(<div>
