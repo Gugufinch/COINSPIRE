@@ -393,7 +393,7 @@ placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),b
 <Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
 <SpendHeatmap txns={txns} dim={dim} off={mOff} T={T}/></div></div>)}
 
-function TxnPage({T,txns,setTxns,addTxnsSmart,cats,mo,apiKey,aiModel,callAI,provider}){
+function TxnPage({T,txns,setTxns,addTxnsSmart,cats,byCat,mo,apiKey,aiModel,callAI,provider}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[showAdd,setShowAdd]=useState(false);
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
@@ -507,18 +507,45 @@ return(<div>
 <div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Description</div><input placeholder="What'd you buy?" value={af.desc} onChange={e=>setAf(p=>({...p,desc:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addTxn()} style={{...inpS(T),fontSize:11,padding:"8px 10px"}}/></div>
 <div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Category</div><select value={af.cat} onChange={e=>setAf(p=>({...p,cat:e.target.value}))} style={{...inpS(T),fontSize:11,padding:"8px 10px"}}>{cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
 <div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Card</div><select value={af.card} onChange={e=>setAf(p=>({...p,card:e.target.value}))} style={{...inpS(T),fontSize:11,padding:"8px 10px"}}>{Object.entries(CARD_MAP).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
-<button onClick={addTxn} style={btnS(T,true)}><Check size={12}/></button></div></div>}
+<button onClick={addTxn} style={btnS(T,true)}><Check size={12}/></button></div>
+{af.desc&&(()=>{const detCat=autoCat(af.desc)||af.cat;const c=cats.find(x=>x.id===detCat);const spent=byCat[detCat]||0;const newAmt=parseFloat(af.amt)||0;const afterSpent=spent+newAmt;const pct=c?.budget>0?(afterSpent/c.budget*100):0;const col=pct>100?T.danger:pct>80?T.warn:T.success;
+return c&&c.budget>0?(<div style={{marginTop:8,padding:"8px 12px",background:col+"10",borderRadius:8,display:"flex",alignItems:"center",gap:10}}>
+<span style={{fontSize:14}}>{c.icon}</span>
+<div style={{flex:1}}>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:3}}>
+<span style={{fontWeight:600,color:col}}>{c.name}</span>
+<span style={{fontFamily:"'Space Mono',monospace",color:col}}>{fmt(afterSpent)} / {fmt(c.budget)} {pct>100?"⚠️ OVER":""}</span></div>
+<div style={{width:"100%",height:4,borderRadius:2,background:T.border,overflow:"hidden"}}>
+<div style={{height:"100%",borderRadius:2,background:col,transition:"width .3s",position:"relative",width:`${Math.min(pct,100)}%`}}>
+{newAmt>0&&spent<c.budget&&<div style={{position:"absolute",right:0,top:0,bottom:0,width:Math.min(newAmt/c.budget*100,100-spent/c.budget*100)+"%",background:col,opacity:.5,borderRadius:2}}/>}
+</div></div></div>
+{c.budget-afterSpent>0?<span style={{fontSize:10,color:T.textDim}}>{fmt(c.budget-afterSpent)} left</span>:
+<span style={{fontSize:10,color:T.danger}}>{fmt(afterSpent-c.budget)} over</span>}
+</div>):null})()}</div>}
 
 <div style={{...glass(T),padding:0,overflow:"hidden"}}>
+<div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:6,overflowX:"auto"}}>
+{cats.filter(c=>c.budget>0&&(byCat[c.id]||0)>0).sort((a,b)=>(byCat[b.id]||0)/b.budget-(byCat[a.id]||0)/a.budget).slice(0,8).map(c=>{
+const spent=byCat[c.id]||0;const pct=c.budget>0?(spent/c.budget*100):0;const col=pct>100?T.danger:pct>80?T.warn:T.success;
+return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px",borderRadius:8,background:col+"10",flexShrink:0,fontSize:10}}>
+<span style={{fontSize:12}}>{c.icon}</span>
+<div style={{width:30,height:3,borderRadius:2,background:T.border,overflow:"hidden"}}><div style={{width:`${Math.min(pct,100)}%`,height:"100%",borderRadius:2,background:col}}/></div>
+<span style={{fontWeight:600,color:col,fontFamily:"'Space Mono',monospace"}}>{pct.toFixed(0)}%</span></div>)})}</div>
 <table style={{width:"100%",borderCollapse:"collapse"}}>
 <thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
 {["Date","Description","Category","Card","Amount",""].map((h,i)=><th key={i} style={{textAlign:i===4?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
 <tbody>{filtered.length===0?<tr><td colSpan={6} style={{padding:40,textAlign:"center",color:T.textDim}}>No transactions{filt?" matching filter":""}</td></tr>:
-filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);return(
+filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat]||0;const catBudget=cat?.budget||0;const catPct=catBudget>0?(catSpent/catBudget*100):0;const catColor=catPct>100?T.danger:catPct>80?T.warn:T.success;return(
 <tr key={t.id} style={{borderBottom:`1px solid ${T.border}`,transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
 <td style={{padding:"10px 14px",fontSize:12,color:T.textDim}}>{t.d}</td>
 <td style={{padding:"10px 14px",fontSize:12,fontWeight:600}}>{t.desc}</td>
-<td style={{padding:"10px 14px"}}><span style={pill((cat?T.infoBg:T.border),cat?T.info:T.textDim)}>{cat?.icon||"📦"} {cat?.name||t.cat}</span></td>
+<td style={{padding:"10px 14px"}}>
+<span style={pill((cat?T.infoBg:T.border),cat?T.info:T.textDim)}>{cat?.icon||"📦"} {cat?.name||t.cat}</span>
+{catBudget>0&&<div style={{marginTop:4,display:"flex",alignItems:"center",gap:6}}>
+<div style={{width:60,height:3,borderRadius:2,background:T.border,overflow:"hidden",flexShrink:0}}>
+<div style={{width:`${Math.min(catPct,100)}%`,height:"100%",borderRadius:2,background:catColor,transition:"width .4s"}}/></div>
+<span style={{fontSize:9,color:catColor,fontWeight:600,fontFamily:"'Space Mono',monospace"}}>{fmt(catSpent)}<span style={{color:T.textDim,fontWeight:400}}>/{fmt(catBudget)}</span></span></div>}
+</td>
 <td style={{padding:"10px 14px",fontSize:11,color:T.textMuted}}>{CARD_MAP[t.card]||t.card}</td>
 <td style={{padding:"10px 14px",fontSize:13,fontWeight:700,textAlign:"right",fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(t.amt)}</td>
 <td style={{padding:"10px 14px"}}><button onClick={()=>delTxn(t.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}} title="Delete"><Trash2 size={12}/></button></td>
@@ -1027,7 +1054,7 @@ setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(
 
 const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim()),card:"debit"}]);setQa("")}}}/>;
-case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
+case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
