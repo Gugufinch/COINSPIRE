@@ -181,7 +181,7 @@ function Confetti({show}){if(!show)return null;return(<div style={{position:"fix
 // ═══════════════════════════════════════════════════
 // LOGIN SCREEN
 // ═══════════════════════════════════════════════════
-function LoginScreen({onLogin,T}){
+function LoginScreen({onLogin,T,userEmojis}){
 const[user,setUser]=useState(null);
 const[pin,setPin]=useState("");
 const[showPin,setShowPin]=useState(false);
@@ -219,7 +219,7 @@ return(
           }}
           onMouseEnter={e=>{e.currentTarget.style.borderColor=T.success;e.currentTarget.style.transform="translateY(-2px)"}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.transform="translateY(0)"}}>
-            <span style={{fontSize:36}}>{u.icon}</span>
+            <span style={{fontSize:36}}>{userEmojis?.[u.id]||u.icon}</span>
             <span style={{fontSize:15,fontWeight:700,color:T.text}}>{u.name}</span>
           </button>
         ))}
@@ -227,7 +227,7 @@ return(
     </div>
   ):(
     <div style={{animation:"fadeUp .3s ease"}}>
-      <div style={{fontSize:48,marginBottom:8}}>{USERS.find(u2=>u2.id===user)?.icon}</div>
+      <div style={{fontSize:48,marginBottom:8}}>{userEmojis?.[user]||USERS.find(u2=>u2.id===user)?.icon}</div>
       <p style={{color:T.textMuted,fontSize:13,marginBottom:16}}>
         {setupMode?"Create a PIN for "+USERS.find(u2=>u2.id===user)?.name:"Enter your PIN"}
       </p>
@@ -382,7 +382,7 @@ return(<div>
 <Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
 <SpendHeatmap txns={txns} dim={dim} off={mOff} T={T}/></div></div>)}
 
-function TxnPage({T,txns,setTxns,cats,mo,apiKey}){
+function TxnPage({T,txns,setTxns,cats,mo,apiKey,aiModel}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[showAdd,setShowAdd]=useState(false);
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
@@ -400,7 +400,7 @@ if(!apiKey){setScanError("Set your API key in Settings first");return}
 setScanLoading(true);setScanError("");setScanResults(null);
 const catList=cats.map(c=>`${c.id}: ${c.name}`).join(", ");
 try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,
+body:JSON.stringify({model:aiModel||"claude-sonnet-4-20250514",max_tokens:2000,
 messages:[{role:"user",content:[
 {type:"image",source:{type:"base64",media_type:"image/png",data:scanImg}},
 {type:"text",text:`Extract ALL transactions from this image. For each transaction, determine the best category from: ${catList}.
@@ -414,13 +414,16 @@ Rules:
 - Clean up merchant names (remove transaction IDs, card numbers etc)
 - If it's a receipt, extract individual line items if visible, otherwise use the total`}]}]})});
 const data=await res.json();
+if(data.error){setScanError(`API Error: ${data.error.message||data.error.type||JSON.stringify(data.error)}`);setScanLoading(false);return}
 const text=data.content?.map(c=>c.text||"").join("")||"";
+if(!text){setScanError("Empty response from API — check your credits or API key");setScanLoading(false);return}
 const clean=text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim();
-const parsed=JSON.parse(clean);
+try{const parsed=JSON.parse(clean);
 if(Array.isArray(parsed)&&parsed.length>0){
 setScanResults(parsed.map((t,i)=>({...t,id:Date.now()+i,card:"debit",selected:true})))}
-else{setScanError("No transactions found in image")}
-}catch(err){setScanError("Failed to parse: "+(err.message||"Check API key"))}
+else{setScanError("No transactions found in image")}}
+catch(pe){setScanError("AI returned non-JSON. Response: "+clean.slice(0,200))}
+}catch(err){setScanError("Network error: "+(err.message||"Could not reach API"))}
 setScanLoading(false)};
 
 const addScanned=()=>{if(!scanResults)return;
@@ -793,6 +796,8 @@ const[sideIncome,setSideIncome]=useState(0);const[apiKey,setApiKey]=useState("")
 const[cScores,setCScores]=useState([]);const[csForm,setCsForm]=useState({score:"",date:new Date().toISOString().slice(0,7)});
 const[userGoals,setUserGoals]=useState(null);const[goalContribs,setGoalContribs]=useState({});
 const[aiOpen,setAiOpen]=useState(false);const[aiMsg,setAiMsg]=useState("");const[aiChat,setAiChat]=useState([]);const[aiLoading,setAiLoading]=useState(false);
+const[aiModel,setAiModel]=useState("claude-sonnet-4-20250514");
+const[userEmojis,setUserEmojis]=useState({greg:"🎸",sarah:"🌸"});
 const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());
 const[keySaved,setKeySaved]=useState(false);
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
@@ -802,8 +807,8 @@ useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("r
 const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 
 // Load/Save
-useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs)}setLoaded(true)})()},[activeUser]);
-useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs]);
+useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis)}setLoaded(true)})()},[activeUser]);
+useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis]);
 
 const txns=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
@@ -833,19 +838,19 @@ return v.map((text,i)=>({icon:ic[i],text,color:co[i]}))},[persona,savR,totS,totB
 useEffect(()=>{const iv=setInterval(()=>setInsI(i=>(i+1)%insights.length),6000);return()=>clearInterval(iv)},[insights.length]);
 
 if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
-<LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T}/></>);
+<LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T} userEmojis={userEmojis}/></>);
 
 const sendAI=async()=>{if(!aiMsg.trim()||!apiKey)return;const um=aiMsg.trim();setAiChat(p=>[...p,{role:"user",text:um}]);setAiMsg("");setAiLoading(true);
 const bCtx=cats.map(c=>`${c.name}:$${(byCat[c.id]||0).toFixed(0)}/$${c.budget}`).join(", ");
 const pPr={pro:"Professional financial advisor.",unhinged:"UNHINGED financial advisor. Roast spending. Caps lock. Drag them.",dark:"Financial advisor with dark humor. Deadpan gallows comedy.",therapist:"Financial therapist. Passive-aggressive.",hype:"HYPE BEAST advisor. Celebrate everything."};
 const sys=`${pPr[persona]||pPr.pro} Advisor for Greg, 33, Chicago. Direct, specific. Under 200 words.\nIncome $${cur.inc}/mo | Fixed $${cur.fix} | Budget: ${bCtx} | Spent $${totS.toFixed(0)}/$${totB}\nDEBT: $${totD} | ASSETS: Sav $${cur.sav} | IRA $${cur.ira} | Stk $${cur.stk} | Joint $${cur.jnt} | NW $${nw.toFixed(0)}\nSavings rate ${savR.toFixed(1)}%`;
 try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}]})});
+body:JSON.stringify({model:aiModel||"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}]})});
 const data=await res.json();setAiChat(p=>[...p,{role:"ai",text:data.content?.map(c=>c.text||"").join("")||"No response."}])}catch{setAiChat(p=>[...p,{role:"ai",text:"Error. Check Settings > API Key."}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}}/>;
-case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo} apiKey={apiKey}/>;
+case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo} apiKey={apiKey} aiModel={aiModel}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
@@ -876,9 +881,22 @@ case"settings":return(
 <input type="password" value={apiKey} onChange={e=>{setApiKey(e.target.value);setKeySaved(false)}} placeholder="sk-ant-..." style={{...inpS(T),flex:1}}/>
 <button onClick={()=>setKeySaved(true)} style={btnS(T,true)}>{keySaved?<><Check size={12}/>Saved</>:<><Save size={12}/>Save</>}</button></div>
 <div style={{fontSize:10,color:keySaved?T.success:T.textDim,marginTop:4}}>{keySaved?"✓ Key saved — auto-persists per user":"Required for AI features (scanning, chat)"}</div></div>
+<div style={{marginBottom:20}}><div style={lbl(T)}>AI Model</div>
+<select value={aiModel} onChange={e=>setAiModel(e.target.value)} style={inpS(T)}>
+<option value="claude-sonnet-4-20250514">Claude Sonnet 4 (fast, cheap)</option>
+<option value="claude-opus-4-20250514">Claude Opus 4 (smartest)</option>
+<option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (fastest, cheapest)</option>
+</select>
+<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Used for transaction scanning and AI chat</div></div>
+<div style={{marginBottom:20}}><div style={lbl(T)}>Your Emoji</div>
+<div style={{display:"flex",alignItems:"center",gap:12}}>
+<span style={{fontSize:32}}>{userEmojis[activeUser]||"😀"}</span>
+<input value={userEmojis[activeUser]||""} onChange={e=>{const v=e.target.value;const emoji=[...v].slice(-1).join("")||"😀";setUserEmojis(p=>({...p,[activeUser]:emoji}))}} style={{...inpS(T),width:80,fontSize:24,textAlign:"center"}} maxLength={4}/>
+<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["🎸","🌸","🎧","💰","🔥","🎯","🚀","⚡","🎨","👑","🦊","🐻"].map(e=>
+<button key={e} onClick={()=>setUserEmojis(p=>({...p,[activeUser]:e}))} style={{fontSize:18,background:userEmojis[activeUser]===e?T.successBg:"transparent",border:`1px solid ${userEmojis[activeUser]===e?T.success:T.border}`,borderRadius:8,padding:"4px 6px",cursor:"pointer"}}>{e}</button>)}</div></div></div>
 <div><div style={lbl(T)}>Account</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
-<span style={{fontSize:24}}>{USERS.find(u=>u.id===activeUser)?.icon}</span>
+<span style={{fontSize:24}}>{userEmojis[activeUser]||USERS.find(u=>u.id===activeUser)?.icon}</span>
 <span style={{fontWeight:600}}>{USERS.find(u=>u.id===activeUser)?.name}</span>
 <button onClick={()=>{setAuthed(false);setLoaded(false)}} style={{...btnS(T,false),marginLeft:"auto"}}><Lock size={12}/>Lock</button></div></div></div>);
 default:return<PlaceholderPage title="Page" icon={Home} T={T}/>}};
@@ -914,7 +932,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 <select value={mo} onChange={e=>setMo(e.target.value)} style={{...inpS(T),width:"auto",padding:"6px 10px",fontSize:11,fontWeight:600,borderRadius:8,cursor:"pointer",appearance:"none",paddingRight:24,backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(T.textDim)}' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 6px center"}}>
 {Object.keys(months).sort().map(k=><option key={k} value={k}>{k}</option>)}</select>
 <button onClick={()=>setTheme(theme==="dark"?"light":"dark")} style={{background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:6,cursor:"pointer",color:T.textMuted,display:"flex"}}>{theme==="dark"?<Sun size={14}/>:<Moon size={14}/>}</button>
-<div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${accent},${T.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,cursor:"pointer"}}>{activeUser[0].toUpperCase()}</div></div></header>
+<div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${accent},${T.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,cursor:"pointer"}}>{userEmojis[activeUser]||activeUser[0].toUpperCase()}</div></div></header>
 <div style={{padding:mob?14:24,maxWidth:1200}}>{renderPage()}</div></main>
 
 {mob&&<nav style={{position:"fixed",bottom:0,left:0,right:0,height:60,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-around",alignItems:"center",zIndex:50,paddingBottom:"env(safe-area-inset-bottom,0)"}}>
