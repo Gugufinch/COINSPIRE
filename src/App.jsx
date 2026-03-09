@@ -385,6 +385,35 @@ placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),b
 <StatCard title="Income" value={fmt(cur.inc)} icon={DollarSign} color={T.info} T={T} delay={.1} subtitle={`Fixed: ${fmt(cur.fix)}`}/>
 <StatCard title="Debt Left" value={fmt(totD)} change={dC} icon={CreditCard} color={totD>0?T.warn:T.success} T={T} delay={.15}/>
 <StatCard title="Savings Rate" value={`${savR.toFixed(1)}%`} icon={PiggyBank} color={savR>15?T.success:savR>5?T.warn:T.danger} T={T} delay={.2}/></div>
+
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
+{(()=>{const fixB=data.fixedBillTotal||0;const varC=data.varCap||690;const left=cur.inc-fixB-varC-totS;const pct=cur.inc>0?((fixB+varC+totS)/cur.inc*100):0;
+return<div style={{...glass(T),borderLeft:`3px solid ${left>0?T.success:T.danger}`}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={lbl(T)}>What's Left</div>
+<div style={{fontSize:9,color:T.textDim}}>Day {day} of {dim}</div></div>
+<div style={{fontSize:28,fontWeight:900,fontFamily:"'Space Mono',monospace",color:left>0?T.success:T.danger,marginBottom:8}}>{fmt(left)}</div>
+<div style={{display:"flex",gap:4,marginBottom:10}}>
+{[{l:"Income",v:cur.inc,c:T.success},{l:"Fixed",v:fixB,c:T.info},{l:"Var Cap",v:varC,c:T.warn},{l:"Spent",v:totS,c:T.danger}].map((s,i)=>(
+<div key={i} style={{flex:Math.max(s.v,1)/cur.inc,background:s.c+"15",borderRadius:6,padding:"4px 3px",textAlign:"center",minWidth:30}}>
+<div style={{fontSize:7,color:s.c,fontWeight:700}}>{s.l}</div>
+<div style={{fontSize:9,fontWeight:700,fontFamily:"'Space Mono',monospace",color:s.c}}>{fmt(s.v)}</div></div>))}</div>
+<PBar pct={Math.min(pct,100)} color={pct>90?T.danger:pct>70?T.warn:T.success} height={4} bg={T.border}/>
+<div style={{fontSize:9,color:T.textDim,marginTop:4}}>{pct.toFixed(0)}% of income committed • {fmt(left/Math.max(dim-day,1))}/day remaining</div></div>})()}
+
+{(()=>{const euroT=8000;const euroS=2400;const euroDate=new Date(2026,7,1);const euroDays=Math.max(0,Math.ceil((euroDate-new Date())/86400000));const euroWeeks=Math.ceil(euroDays/7);const perWeek=(euroT-euroS)/Math.max(euroWeeks,1);const pct=euroS/euroT*100;
+return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={lbl(T)}>✈️ Europe Trip</div>
+<div style={pill(T.infoBg,T.info)}>{euroDays} days left</div></div>
+<div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:8}}>
+<div style={{fontSize:28,fontWeight:900,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(euroS)}</div>
+<div style={{fontSize:13,color:T.textDim}}>of {fmt(euroT)}</div></div>
+<PBar pct={pct} color={T.info} height={8} bg={T.border}/>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:10}}>
+<div><div style={{fontSize:8,color:T.textDim}}>REMAINING</div><div style={{fontSize:14,fontWeight:700,color:T.warn}}>{fmt(euroT-euroS)}</div></div>
+<div><div style={{fontSize:8,color:T.textDim}}>PER WEEK</div><div style={{fontSize:14,fontWeight:700,color:perWeek>300?T.danger:T.warn}}>{fmt(perWeek)}</div></div>
+<div><div style={{fontSize:8,color:T.textDim}}>PROGRESS</div><div style={{fontSize:14,fontWeight:700,color:T.success}}>{pct.toFixed(0)}%</div></div></div></div>})()}</div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:14,marginTop:14}}>
 <VelocityGauge spent={totS} budget={totB} day={day} dim={dim} T={T}/>
 <RunwayCalc savings={totalSav} burn={avgBurn} T={T}/></div>
@@ -513,7 +542,14 @@ return(<div>
 <div style={{maxHeight:200,overflow:"auto",marginTop:8}}>{csvParsed.slice(0,10).map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"4px 0",borderBottom:`1px solid ${T.border}`}}>
 <span>{t.desc?.slice(0,30)}</span><span style={{color:T.danger,fontWeight:600}}>{fmt(t.amt)}</span></div>)}</div>
 {csvParsed.length>10&&<div style={{fontSize:10,color:T.textDim}}>...and {csvParsed.length-10} more</div>}
-<button onClick={()=>{addTxnsSmart(csvParsed);setCsvTxt("");setCsvParsed([]);setCsvMode(false)}} style={{...btnS(T,true),width:"100%",justifyContent:"center",marginTop:8}}><Check size={12}/>Import {csvParsed.length} Transactions</button></div>}</div>}
+<button onClick={()=>{addTxnsSmart(csvParsed);setCsvTxt("");setCsvParsed([]);setCsvMode(false)}} style={{...btnS(T,true),width:"100%",justifyContent:"center",marginTop:8}}><Check size={12}/>Import {csvParsed.length} Transactions</button>
+{(()=>{const billMatches=csvParsed.filter(t=>{const dl=t.desc.toLowerCase();return billNames.has(dl)||[...billNames].some(bn=>dl.includes(bn.toLowerCase()))});
+return billMatches.length>0?<div style={{marginTop:8,padding:"8px 10px",background:T.infoBg,borderRadius:8}}>
+<div style={{fontSize:11,fontWeight:700,color:T.info,marginBottom:4}}>🔍 Auto-detected {billMatches.length} bill{billMatches.length>1?"s":""}</div>
+<div style={{fontSize:10,color:T.textDim}}>These will be flagged as bills and won't count toward your spending budget:</div>
+{billMatches.slice(0,5).map((t,i)=><div key={i} style={{fontSize:10,padding:"2px 0",display:"flex",justifyContent:"space-between"}}>
+<span>{t.desc?.slice(0,30)}</span><span style={{color:T.info,fontWeight:600}}>{fmt(t.amt)}</span></div>)}</div>:null})()}
+</div>}</div>}
 
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
@@ -603,6 +639,20 @@ return(<div>
 <StatCard title="Category Budget" value={fmt(totB)} icon={Target} color={T.info} T={T}/>
 <StatCard title="Spent" value={fmt(totS)} icon={DollarSign} color={totS>totB?T.danger:T.success} T={T}/>
 <StatCard title="Remaining" value={fmt(remaining)} icon={PiggyBank} color={remaining>0?T.success:T.danger} T={T}/></div>
+
+<div style={{...glass(T),marginBottom:14}}>
+<div style={lbl(T)}>Spending by Category</div>
+<ResponsiveContainer width="100%" height={160}>
+<BarChart data={cats.filter(c=>c.budget>0).map(c=>({name:c.name.slice(0,6),budget:c.budget,spent:byCat[c.id]||0,icon:c.icon}))}>
+<CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+<XAxis dataKey="name" tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false}/>
+<YAxis tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${v}`}/>
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v)]}/>
+<Bar dataKey="budget" fill={T.info+"40"} name="Budget" radius={[3,3,0,0]}/>
+<Bar dataKey="spent" fill={T.danger} name="Spent" radius={[3,3,0,0]}/></BarChart></ResponsiveContainer>
+<div style={{display:"flex",gap:12,justifyContent:"center",marginTop:6}}>
+<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:T.textMuted}}><div style={{width:8,height:8,borderRadius:2,background:T.info+"40"}}/>Budget</div>
+<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:T.textMuted}}><div style={{width:8,height:8,borderRadius:2,background:T.danger}}/>Spent</div></div></div>
 
 <div style={glass(T)}>
 <div style={lbl(T)}>Category Budgets</div>
@@ -940,6 +990,22 @@ return(<div>
 <div style={lbl(T)}>Eliminated 💀</div>
 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
 {paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name||d.id}</div>)}</div></div>}
+
+{active.filter(d=>(d.minPay||0)>0).length>0&&<div style={{...glass(T),marginBottom:14}}>
+<div style={lbl(T)}>What If? Extra Payment Simulator</div>
+{[50,100,200].map(extra=>{const scenarios=active.filter(d=>(d.minPay||0)>0).map(d=>{const r=d.rate/100/12;let rem=d.bal;let m=0;while(rem>0&&m<120){rem=rem+rem*r-(d.minPay+extra/active.filter(x=>x.minPay>0).length);m++}return m});
+const maxMo=Math.max(...scenarios);const baseMo=Math.max(...payoffs.map(p=>p.months));const saved=baseMo-maxMo;
+const totalInt=(extra2)=>active.filter(d=>(d.minPay||0)>0).reduce((s,d)=>{const r=d.rate/100/12;let rem=d.bal;let intT=0;let m=0;const pay=d.minPay+extra2/active.filter(x=>x.minPay>0).length;while(rem>0&&m<120){const i=rem*r;intT+=i;rem=rem+i-pay;m++}return s+Math.max(intT,0)},0);
+const intSaved=totalInt(0)-totalInt(extra);
+return<div key={extra} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={{fontSize:14,fontWeight:800,color:T.success,fontFamily:"'Space Mono',monospace",minWidth:60}}>+{fmt(extra)}</div>
+<div><div style={{fontSize:12,fontWeight:600}}>extra/month</div>
+<div style={{fontSize:10,color:T.textDim}}>split across active debts</div></div></div>
+<div style={{display:"flex",gap:16,alignItems:"center"}}>
+<div style={{textAlign:"right"}}><div style={{fontSize:8,color:T.textDim}}>FREE</div><div style={{fontSize:13,fontWeight:700,color:T.success}}>{saved}mo sooner</div></div>
+<div style={{textAlign:"right"}}><div style={{fontSize:8,color:T.textDim}}>INT SAVED</div><div style={{fontSize:13,fontWeight:700,color:T.info}}>{fmt(intSaved)}</div></div></div></div>})}
+</div>}
 
 {editId&&<Modal onClose={()=>setEditId(null)} T={T}>
 <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>Edit Debt</div>
@@ -1535,7 +1601,10 @@ const dim=dimOf(mo);const effectiveDay=mo===curMK?day:dim;
 const stepMo=(dir)=>{const p=mo.split("'");let mi=MO.indexOf(p[0]);let yr=parseInt(p[1]);
 if(dir===1){mi++;if(mi>11){mi=0;yr++}}else{mi--;if(mi<0){mi=11;yr--}}
 const nk=`${MO[mi]}'${String(yr).padStart(2,"0")}`;
-if(!months[nk])setMonths(prev=>({...prev,[nk]:{txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))}}));setMo(nk)};
+if(!months[nk]){setMonths(prev=>({...prev,[nk]:{txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))}}));
+// Auto-seed recurring splits for new month
+if(recurringSplits.length>0){const rc=recurringSplits.map(r=>({id:`rec_${r.id}_${nk}`,recurId:r.id,desc:r.desc,amt:r.amt,sarahAmt:r.amt*((r.pct||50)/100),gregAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}));
+setCustomSplits(p=>({...p,[nk]:[...(p[nk]||[]),...rc.filter(r=>!(p[nk]||[]).find(c=>c.recurId===r.recurId))]}))}}setMo(nk)};
 const byCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);txns.filter(t=>!t.isBill).forEach(t=>{if(m[t.cat]!==undefined)m[t.cat]+=t.amt});return m},[txns,cats]);
 const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]),MO.indexOf(p[0]),1).getDay()+6)%7},[mo]);
 
@@ -1555,7 +1624,7 @@ useEffect(()=>{const iv=setInterval(()=>setInsI(i=>(i+1)%insights.length),6000);
 // Auto-create current month if missing
 useEffect(()=>{if(loaded&&!months[curMK]){setMonths(p=>({...p,[curMK]:{txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))}}))}},[ loaded]);
 
-if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@media(max-width:768px){table{font-size:11px!important}th,td{padding:6px 8px!important}}`}</style>
 <LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T} userEmojis={userEmojis}/></>);
 
 const sendAI=async()=>{if(!aiMsg.trim()||!apiKey)return;const um=aiMsg.trim();setAiChat(p=>[...p,{role:"user",text:um}]);setAiMsg("");setAiLoading(true);
@@ -1566,7 +1635,7 @@ try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({
 setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
-case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
+case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
@@ -1624,7 +1693,7 @@ default:return<PlaceholderPage title="Page" icon={Home} T={T}/>}};
 const sW=mob?0:(sideOpen?230:64);
 return(<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Outfit','DM Sans',-apple-system,sans-serif",display:"flex",transition:"background .3s"}}>
 <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
-@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@media(max-width:768px){table{font-size:11px!important}th,td{padding:6px 8px!important}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes toastIn{from{opacity:0;transform:translateX(100px)}to{opacity:1;transform:translateX(0)}}
 *{scrollbar-width:thin;scrollbar-color:${T.border} transparent}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}
