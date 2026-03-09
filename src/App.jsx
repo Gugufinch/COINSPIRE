@@ -706,14 +706,15 @@ return(<div key={b.id} style={{padding:"10px 0",borderBottom:i<arr.length-1?`1px
 {b.group&&<span style={{fontSize:9,color:T.textDim}}>{b.group}</span>}
 {sp&&sp.confirmed&&<span style={pill(T.purpleBg,T.purple)}>Split</span>}
 </div></div>
-{isVar?(<div style={{display:"grid",gridTemplateColumns:"55px 55px 55px",gap:2,textAlign:"right"}}>
-{isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:55,fontSize:10,padding:"2px 4px",fontFamily:"'Space Mono',monospace"}}/>
-:<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:T.info}} title="Your allocation">{fmt(sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt)}</div>}
-<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:actual!=null?(()=>{const yourActual=sp&&sp.confirmed?actual*(1-sp.pct/100):actual;const yourBudget=sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt;return yourActual>yourBudget?T.danger:T.success})():T.textDim}} title="Actual cost (your share)">{actual!=null?fmt(sp&&sp.confirmed?actual*(1-sp.pct/100):actual):"—"}</div>
-{actual!=null?(()=>{const yourActual=sp&&sp.confirmed?actual*(1-sp.pct/100):actual;const yourBudget=sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt;const v=yourActual-yourBudget;
-return<div style={{fontSize:10,fontFamily:"'Space Mono',monospace",color:v>0?T.danger:T.success}} title="Variance">{v>0?"+":""}{fmt(v)}</div>})()
+{isVar?(()=>{const yourAlloc=b.amt;const fullBill=actual!=null?actual:null;const yourShare=fullBill!=null?(sp&&sp.confirmed?fullBill*(1-sp.pct/100):fullBill):null;const over=yourShare!=null?(yourShare-yourAlloc):null;
+return<div style={{display:"grid",gridTemplateColumns:"50px 50px 50px 50px",gap:3,textAlign:"right"}}>
+{isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:50,fontSize:10,padding:"2px 4px",fontFamily:"'Space Mono',monospace"}} title="Edit allocation"/>
+:<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:T.info}} title="Your allocation">{fmt(yourAlloc)}</div>}
+<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:fullBill!=null?T.text:T.textDim}} title="Full bill amount">{fullBill!=null?fmt(fullBill):"—"}</div>
+<div style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:yourShare!=null?(over>0?T.danger:T.success):T.textDim}} title="Your share after split">{yourShare!=null?fmt(yourShare):"—"}</div>
+{over!=null?<div style={{fontSize:10,fontWeight:700,fontFamily:"'Space Mono',monospace",color:over>0?T.danger:T.success}} title="Variance vs allocation">{over>0?"+":""}{fmt(over)}</div>
 :<div style={{fontSize:10,color:T.textDim}}>—</div>}
-</div>):(<div style={{textAlign:"right",minWidth:70}}>
+</div>})():(<div style={{textAlign:"right",minWidth:70}}>
 {isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:70,fontSize:12,padding:"3px 6px",fontFamily:"'Space Mono',monospace"}}/>
 :<div style={{fontSize:13,fontWeight:700,fontFamily:"'Space Mono',monospace",color:paid?T.success:T.text}}>{fmt(sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt)}</div>}
 </div>)}
@@ -738,11 +739,13 @@ return<div style={{fontSize:10,fontFamily:"'Space Mono',monospace",color:v>0?T.d
 <span style={pill(T.successBg,T.success)}>✓ Split {sp.pct}% confirmed</span>
 <button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:false};setSplits(p=>({...p,[mo]:ms}))}} style={{fontSize:9,color:T.textDim,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>edit</button></div>}
 {/* Variable bill: inline actual entry when not yet paid */}
-{isVar&&!paid&&!moActuals[b.id]&&<div style={{marginLeft:34,marginTop:4,display:"flex",alignItems:"center",gap:6}}>
-<span style={{fontSize:9,color:T.textDim}}>Log actual:</span>
-<span style={{fontSize:10,color:T.textDim}}>$</span>
-<input type="number" placeholder={String(b.amt)} onKeyDown={e=>{if(e.key==="Enter"&&e.target.value){const ma={...(billActuals[mo]||{})};ma[b.id]=+e.target.value;setBillActuals(p=>({...p,[mo]:ma}))}}} style={{...inpS(T),width:70,fontSize:11,padding:"3px 6px",fontFamily:"'Space Mono',monospace"}}/>
-<span style={{fontSize:9,color:T.textDim}}>Enter to save</span></div>}
+{isVar&&!paid&&!moActuals[b.id]&&<div style={{marginLeft:34,marginTop:4,display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:T.warnBg,borderRadius:8}}>
+<span style={{fontSize:10,color:T.warn,fontWeight:700}}>Full bill amount: $</span>
+<input type="number" placeholder={String(b.amt)} onKeyDown={e=>{if(e.key==="Enter"&&e.target.value){const ma={...(billActuals[mo]||{})};ma[b.id]=+e.target.value;setBillActuals(p=>({...p,[mo]:ma}))}}} style={{...inpS(T),width:80,fontSize:12,padding:"4px 8px",fontFamily:"'Space Mono',monospace",fontWeight:700}}/>
+<span style={{fontSize:9,color:T.textDim}}>Enter to save{sp&&sp.confirmed?` → your ${100-sp.pct}% = shown in YOURS column`:""}</span></div>}
+{isVar&&!paid&&moActuals[b.id]!=null&&<div style={{marginLeft:34,marginTop:3,display:"flex",alignItems:"center",gap:6}}>
+<span style={{fontSize:9,color:T.success}}>✓ Bill logged: {fmt(moActuals[b.id])}</span>
+<button onClick={()=>{const ma={...(billActuals[mo]||{})};delete ma[b.id];setBillActuals(p=>({...p,[mo]:ma}))}} style={{fontSize:9,color:T.textDim,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>clear</button></div>}
 </div>)};
 
 return(<div>
@@ -810,8 +813,8 @@ return<div style={{fontSize:12,marginBottom:12}}>
 <div style={lbl(T)}>Variable Bills</div>
 <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:9,color:T.textDim}}>Cap: $</span>
 <input type="number" value={varCap} onChange={e=>setVarCap(+e.target.value)} style={{...inpS(T),width:60,fontSize:11,padding:"3px 6px",fontWeight:700}}/></div></div>
-{varBills.length>0&&<div style={{display:"grid",gridTemplateColumns:"24px 36px 1fr 55px 55px 55px auto",gap:2,padding:"4px 0",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-<div/><div/><div/><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>ALLOC</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>ACTUAL</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>+/-</div><div/></div>}
+{varBills.length>0&&<div style={{display:"grid",gridTemplateColumns:"24px 40px 1fr 50px 50px 50px 50px auto",gap:3,padding:"4px 0",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
+<div/><div/><div/><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>ALLOC</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>BILL</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>YOURS</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>+/-</div><div/></div>}
 {sortBills(varBills).map((b,i)=>renderRow(b,i,varBills))}
 {varActual>0&&<div style={{borderTop:`1px solid ${T.border}`,padding:"8px 0 0",marginTop:4,fontSize:10}}>
 <div style={{display:"flex",justifyContent:"space-between"}}>
@@ -841,7 +844,7 @@ return(<div key={d} style={{marginBottom:10}}>
 {sortBills(allBills.filter(b=>!b.due||b.due===0)).map((b,i,arr)=>renderRow(b,i,arr))}</div>}</div>}
 
 <div style={{marginTop:10,fontSize:10,color:T.textDim,display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4}}>
-<span>Variable: edit pencil = change allocation | checkmark = enter actual cost | splits show your share only</span>
+<span>✏️ = edit allocation | Enter full bill amount below → YOURS shows your share after splits</span>
 <span>Annual: <strong style={{color:T.warn}}>{fmt((fixedTotal+varCap)*12)}</strong>/yr</span></div>
 </div>)}
 
