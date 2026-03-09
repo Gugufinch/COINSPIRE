@@ -148,6 +148,12 @@ hype:{name:"Hype Beast",icon:"🎭"}};
 
 const USERS=[{id:"greg",name:"Greg",icon:"🎸"},{id:"sarah",name:"Sarah",icon:"🌸"}];
 
+const AI_PROVIDERS={
+anthropic:{name:"Claude (Anthropic)",vision:true,models:[{id:"claude-sonnet-4-20250514",name:"Sonnet 4 (fast)"},{id:"claude-opus-4-20250514",name:"Opus 4 (smartest)"},{id:"claude-haiku-4-5-20251001",name:"Haiku 4.5 (cheapest)"}],placeholder:"sk-ant-..."},
+openai:{name:"OpenAI",vision:true,models:[{id:"gpt-4o",name:"GPT-4o"},{id:"gpt-4o-mini",name:"GPT-4o Mini (cheap)"},{id:"gpt-4.1",name:"GPT-4.1"}],placeholder:"sk-..."},
+deepseek:{name:"DeepSeek",vision:false,models:[{id:"deepseek-chat",name:"DeepSeek V3"},{id:"deepseek-reasoner",name:"DeepSeek R1 (reasoning)"}],placeholder:"sk-..."},
+gemini:{name:"Google Gemini",vision:true,models:[{id:"gemini-2.5-flash",name:"Gemini 2.5 Flash"},{id:"gemini-2.5-pro",name:"Gemini 2.5 Pro"}],placeholder:"AIza..."}};
+
 // ═══════════════════════════════════════════════════
 // STYLE HELPERS
 // ═══════════════════════════════════════════════════
@@ -387,7 +393,7 @@ placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),b
 <Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
 <SpendHeatmap txns={txns} dim={dim} off={mOff} T={T}/></div></div>)}
 
-function TxnPage({T,txns,setTxns,cats,mo,apiKey,aiModel,callAI}){
+function TxnPage({T,txns,setTxns,addTxnsSmart,cats,mo,apiKey,aiModel,callAI,provider}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[showAdd,setShowAdd]=useState(false);
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
@@ -395,7 +401,7 @@ const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResul
 const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");const[csvBank,setCsvBank]=useState("chase");const[csvParsed,setCsvParsed]=useState([]);
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const filtered=useMemo(()=>{let f=[...txns];if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF]);
-const addTxn=()=>{if(!af.desc||!af.amt)return;setTxns(p=>[{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card},...p]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
+const addTxn=()=>{if(!af.desc||!af.amt)return;addTxnsSmart([{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card}]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
 const delTxn=id=>setTxns(p=>p.filter(t=>t.id!==id));
 
 const handleImageUpload=e=>{const file=e.target.files?.[0];if(!file)return;
@@ -424,7 +430,7 @@ setScanLoading(false)};
 
 const addScanned=()=>{if(!scanResults)return;
 const toAdd=scanResults.filter(t=>t.selected).map(t=>({id:t.id,d:t.date||new Date().toISOString().split("T")[0],desc:t.desc,amt:t.amt,cat:t.cat||"misc",card:t.card||"debit"}));
-setTxns(p=>[...toAdd,...p]);setScanMode(false);setScanResults(null);setScanImg(null);setScanPreview(null)};
+addTxnsSmart(toAdd);setScanMode(false);setScanResults(null);setScanImg(null);setScanPreview(null)};
 
 return(<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
@@ -444,6 +450,7 @@ return(<div>
 <div style={{display:"flex",alignItems:"center",gap:8}}><Camera size={16} color={T.purple}/><span style={{fontSize:14,fontWeight:700}}>Scan Transactions</span></div>
 <button onClick={()=>{setScanMode(false);setScanResults(null);setScanImg(null);setScanPreview(null)}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={16}/></button></div>
 <p style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Upload a receipt, bank statement screenshot, or any image with transactions. AI will extract and categorize them.</p>
+{!AI_PROVIDERS[provider||"anthropic"]?.vision&&<div style={{padding:"8px 12px",borderRadius:8,background:T.warnBg,color:T.warn,fontSize:11,marginBottom:12}}>⚠️ Your current AI provider doesn't support image scanning. Switch to Claude, OpenAI, or Gemini in Settings.</div>}
 
 {!scanResults?(
 <div>
@@ -491,7 +498,7 @@ return(<div>
 <div style={{maxHeight:200,overflow:"auto",marginTop:8}}>{csvParsed.slice(0,10).map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"4px 0",borderBottom:`1px solid ${T.border}`}}>
 <span>{t.desc?.slice(0,30)}</span><span style={{color:T.danger,fontWeight:600}}>{fmt(t.amt)}</span></div>)}</div>
 {csvParsed.length>10&&<div style={{fontSize:10,color:T.textDim}}>...and {csvParsed.length-10} more</div>}
-<button onClick={()=>{setTxns(p=>[...csvParsed,...p]);setCsvTxt("");setCsvParsed([]);setCsvMode(false)}} style={{...btnS(T,true),width:"100%",justifyContent:"center",marginTop:8}}><Check size={12}/>Import {csvParsed.length} Transactions</button></div>}</div>}
+<button onClick={()=>{addTxnsSmart(csvParsed);setCsvTxt("");setCsvParsed([]);setCsvMode(false)}} style={{...btnS(T,true),width:"100%",justifyContent:"center",marginTop:8}}><Check size={12}/>Import {csvParsed.length} Transactions</button></div>}</div>}
 
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
@@ -825,15 +832,11 @@ const[aiModel,setAiModel]=useState("claude-sonnet-4-20250514");
 const[aiProvider,setAiProvider]=useState("anthropic");
 const[userEmojis,setUserEmojis]=useState({greg:"🎸",sarah:"🌸"});
 
-const AI_PROVIDERS={
-anthropic:{name:"Claude (Anthropic)",models:[{id:"claude-sonnet-4-20250514",name:"Sonnet 4 (fast)"},{id:"claude-opus-4-20250514",name:"Opus 4 (smartest)"},{id:"claude-haiku-4-5-20251001",name:"Haiku 4.5 (cheapest)"}],placeholder:"sk-ant-..."},
-openai:{name:"OpenAI",models:[{id:"gpt-4o",name:"GPT-4o"},{id:"gpt-4o-mini",name:"GPT-4o Mini (cheap)"},{id:"gpt-4.1",name:"GPT-4.1"}],placeholder:"sk-..."},
-deepseek:{name:"DeepSeek",models:[{id:"deepseek-chat",name:"DeepSeek V3"},{id:"deepseek-reasoner",name:"DeepSeek R1 (reasoning)"}],placeholder:"sk-..."},
-gemini:{name:"Google Gemini",models:[{id:"gemini-2.5-flash",name:"Gemini 2.5 Flash"},{id:"gemini-2.5-pro",name:"Gemini 2.5 Pro"}],placeholder:"AIza..."}};
-
 const callAI=async({system,messages,image,maxTokens=1000})=>{
 const p=aiProvider;const m=aiModel;const k=apiKey;
 if(!k)throw new Error("No API key set");
+const hasImage=messages.some(msg=>msg.image);
+if(hasImage&&!AI_PROVIDERS[p]?.vision){throw new Error(`${AI_PROVIDERS[p]?.name||p} doesn't support image scanning. Switch to Claude, OpenAI, or Gemini in Settings.`)}
 if(p==="anthropic"){
 const msgs=messages.map(msg=>{
 if(msg.image){return{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/png",data:msg.image}},{type:"text",text:msg.content}]}}
@@ -883,6 +886,30 @@ const txns=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
 const setCats=fn=>setMonths(p=>({...p,[mo]:{...p[mo],budgets:typeof fn==="function"?fn(p[mo]?.budgets||DEFAULT_CATS):fn}}));
 
+// Smart add: routes transactions to correct month by date
+const dateToMK=d=>{try{const dt=new Date(d);if(isNaN(dt))return mo;return`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`}catch{return mo}};
+const addTxnsSmart=(newTxns)=>{
+const byMonth={};newTxns.forEach(t=>{const mk=dateToMK(t.d);if(!byMonth[mk])byMonth[mk]=[];byMonth[mk].push(t)});
+setMonths(p=>{const n={...p};Object.entries(byMonth).forEach(([mk,ts])=>{
+if(!n[mk])n[mk]={txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))};
+n[mk]={...n[mk],txns:[...ts,...(n[mk].txns||[])]}});return n});
+checkAchievements(newTxns.length)};
+
+// 🏆 Achievement system
+const[toast,setToast]=useState(null);
+const showToast=(icon,title,sub,color)=>{setToast({icon,title,sub,color});setTimeout(()=>setToast(null),4000)};
+const checkAchievements=(addedCount)=>{
+const allTxns=Object.values(months).flatMap(m=>m.txns||[]);
+const total=allTxns.length+addedCount;
+if(total===1)showToast("🎉","First Transaction!","Your financial journey begins",T.success);
+else if(total===10)showToast("🔟","Double Digits!","10 transactions tracked",T.info);
+else if(total===50)showToast("🌟","Half Century!","50 transactions logged",T.purple);
+else if(total===100)showToast("💯","TRIPLE DIGITS!","100 transactions. You're a machine",T.warn);
+else if(total===250)showToast("🏆","Quarter Thousand!","250 transactions. Obsessed much?",T.success);
+else if(addedCount>=5)showToast("⚡","Bulk Import!",`${addedCount} transactions in one shot`,T.info);
+else if(Math.random()<0.08)showToast(["💰","🪙","📊","✨","🎯"][Math.floor(Math.random()*5)],"Logged!",
+["Money tracked is money managed","Every dollar accounted for","Building that financial awareness","Data is power","One step closer to freedom"][Math.floor(Math.random()*5)],T.success)};
+
 const totD=debts.reduce((s,d)=>s+(d.bal||0),0);const totS=txns.reduce((s,t)=>s+t.amt,0);const totB=cats.reduce((s,c)=>s+c.budget,0);
 const cur={...HISTORY[HISTORY.length-1],sav:bal.sav,ira:bal.ira,stk:bal.stk,jnt:bal.jnt,inc:bal.inc,fix:bal.fix,loans:totD};
 const prev=HISTORY[HISTORY.length-2];
@@ -906,6 +933,9 @@ return v.map((text,i)=>({icon:ic[i],text,color:co[i]}))},[persona,savR,totS,totB
 
 useEffect(()=>{const iv=setInterval(()=>setInsI(i=>(i+1)%insights.length),6000);return()=>clearInterval(iv)},[insights.length]);
 
+// Auto-create current month if missing
+useEffect(()=>{if(loaded&&!months[curMK]){setMonths(p=>({...p,[curMK]:{txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))}}))}},[ loaded]);
+
 if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
 <LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T} userEmojis={userEmojis}/></>);
 
@@ -917,8 +947,8 @@ try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({
 setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
-case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){setTxns(p=>[{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim()),card:"debit"},...p]);setQa("")}}}/>;
-case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} cats={cats} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI}/>;
+case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim()),card:"debit"}]);setQa("")}}}/>;
+case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
@@ -971,7 +1001,7 @@ case"settings":return(
 <button onClick={()=>setRecurring(recurring.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.danger,cursor:"pointer"}}><Trash2 size={12}/></button></div>)}</div>
 <div style={{display:"flex",gap:6,marginTop:8}}>
 <button onClick={()=>setRecurring([...recurring,{desc:"New Bill",amt:0,cat:"misc"}])} style={btnS(T,false)}><Plus size={11}/>Add Bill</button>
-<button onClick={()=>{const d=new Date().toISOString().split("T")[0];setTxns(p=>[...recurring.map((b,i)=>({id:Date.now()+i,d,desc:b.desc,amt:b.amt,cat:b.cat,card:"debit"})),...p])}} style={btnS(T,true)}><Zap size={11}/>Log All ({fmt(recurring.reduce((s,r)=>s+r.amt,0))})</button></div>
+<button onClick={()=>{const d=new Date().toISOString().split("T")[0];addTxnsSmart(recurring.map((b,i)=>({id:Date.now()+i,d,desc:b.desc,amt:b.amt,cat:b.cat,card:"debit"})))}} style={btnS(T,true)}><Zap size={11}/>Log All ({fmt(recurring.reduce((s,r)=>s+r.amt,0))})</button></div>
 <div style={{fontSize:10,color:T.textDim,marginTop:4}}>Edit bills above. "Log All" adds them as transactions for this month.</div></div>
 <div><div style={lbl(T)}>Account</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -985,6 +1015,7 @@ return(<div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'
 <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes toastIn{from{opacity:0;transform:translateX(100px)}to{opacity:1;transform:translateX(0)}}
 *{scrollbar-width:thin;scrollbar-color:${T.border} transparent}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}
 input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 
@@ -1028,6 +1059,12 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 {NAV.map(item=>{const act=tab===item.id;return(
 <button key={item.id} onClick={()=>{setTab(item.id);setSideOpen(false)}} style={{width:"100%",padding:"11px 18px",display:"flex",alignItems:"center",gap:10,background:act?accent+"12":"transparent",border:"none",borderLeft:act?`3px solid ${accent}`:"3px solid transparent",color:act?accent:T.textMuted,cursor:"pointer",fontSize:13,fontWeight:act?700:500}}>
 <item.icon size={16}/>{item.label}</button>)})}</nav></div>}
+
+{/* 🏆 Achievement Toast */}
+{toast&&<div style={{position:"fixed",top:20,right:20,zIndex:200,background:T.card,border:`1px solid ${toast.color}40`,borderRadius:16,padding:"14px 20px",display:"flex",alignItems:"center",gap:12,boxShadow:`0 8px 32px ${toast.color}20`,animation:"toastIn .4s ease",maxWidth:340}}>
+<span style={{fontSize:28}}>{toast.icon}</span>
+<div><div style={{fontSize:14,fontWeight:800,color:toast.color}}>{toast.title}</div>
+<div style={{fontSize:11,color:T.textMuted}}>{toast.sub}</div></div></div>}
 
 {/* AI Chat FAB + Panel */}
 {apiKey&&<>
