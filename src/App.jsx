@@ -856,9 +856,13 @@ const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal<=0||d.sta
 const totalDebt=active.reduce((s,d)=>s+(d.bal||0),0);
 const totalMonthly=active.reduce((s,d)=>s+(d.minPay||0),0);
 const[editId,setEditId]=useState(null);const[ef,setEf]=useState({});
+const[showAdd,setShowAdd]=useState(false);const[nf,setNf]=useState({name:"",bal:"",rate:"",minPay:"",note:""});
 
 const startEdit=(d)=>{setEditId(d.id);setEf({name:d.name,bal:d.bal,rate:d.rate||0,minPay:d.minPay||0,note:d.note||""})};
 const saveDebtEdit=()=>{setDebts(p=>p.map(d=>d.id===editId?{...d,name:ef.name,bal:+ef.bal,rate:+ef.rate,minPay:+ef.minPay,note:ef.note}:d));setEditId(null)};
+const addDebt=()=>{if(!nf.name||!nf.bal)return;setDebts(p=>[...p,{id:`d_${Date.now()}`,name:nf.name,bal:+nf.bal,rate:+nf.rate||0,minPay:+nf.minPay||0,status:"active",note:nf.note}]);setNf({name:"",bal:"",rate:"",minPay:"",note:""});setShowAdd(false)};
+const markPaid=(id)=>setDebts(p=>p.map(d=>d.id===id?{...d,bal:0,status:"paid"}:d));
+const removeDebt=(id)=>setDebts(p=>p.filter(d=>d.id!==id));
 
 const payoffs=active.filter(d=>(d.minPay||0)>0).map(d=>{const pay=d.minPay;const r=d.rate/100/12;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
 while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:Math.max(0,rem)});const interest=rem*r;rem=rem+interest-pay;m++;dt.setMonth(dt.getMonth()+1)}
@@ -878,6 +882,18 @@ return(<div>
 <StatCard title="Eliminated" value={`${paid.length}/${debts.length}`} icon={Check} color={T.success} T={T} subtitle={`${active.length} remaining`}/>
 <StatCard title="Monthly" value={fmt(totalMonthly)} icon={Calendar} color={T.info} T={T}/></div>
 
+<div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+<button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={11}/>Add Debt</button></div>
+
+{showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
+<div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Name</div><input placeholder="Loan name" value={nf.name} onChange={e=>setNf(p=>({...p,name:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Balance</div><input type="number" placeholder="$" value={nf.bal} onChange={e=>setNf(p=>({...p,bal:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>APR %</div><input type="number" placeholder="0" value={nf.rate} onChange={e=>setNf(p=>({...p,rate:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Mo. Payment</div><input type="number" placeholder="$0" value={nf.minPay} onChange={e=>setNf(p=>({...p,minPay:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Note</div><input placeholder="Optional" value={nf.note} onChange={e=>setNf(p=>({...p,note:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<button onClick={addDebt} style={btnS(T,true)}><Check size={12}/></button></div></div>}
+
 {combined.length>1&&<div style={{...glass(T),marginBottom:14}}>
 <div style={lbl(T)}>Total Debt Forecast</div>
 <ResponsiveContainer width="100%" height={180}>
@@ -896,7 +912,10 @@ return(<div>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
 <div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</div>
 <div style={pill(T.infoBg,T.info)}>Free {d.freeDate} ({d.months}mo)</div></div>
-<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button></div></div>
+<div style={{display:"flex",flexDirection:"column",gap:2}}>
+<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}} title="Edit"><Edit3 size={12}/></button>
+<button onClick={()=>markPaid(d.id)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",opacity:.4}} title="Mark paid off"><Check size={12}/></button>
+</div></div></div>
 <ResponsiveContainer width="100%" height={100}>
 <AreaChart data={d.pts}><defs><linearGradient id={`dg${d.id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient></defs>
 <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
@@ -913,7 +932,9 @@ return(<div>
 <div style={{fontSize:10,color:T.textDim}}>{d.rate?d.rate+"% APR • ":""}No active payments{d.note?` • ${d.note}`:""}</div></div>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
 <span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn,fontSize:16}}>{fmt(d.bal)}</span>
-<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button></div></div>)}</div>}
+<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}} title="Edit"><Edit3 size={12}/></button>
+<button onClick={()=>markPaid(d.id)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",opacity:.4}} title="Mark paid"><Check size={12}/></button>
+<button onClick={()=>removeDebt(d.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.2}} title="Remove"><Trash2 size={10}/></button></div></div>)}</div>}
 
 {paid.length>0&&<div style={{...glass(T),marginTop:14}}>
 <div style={lbl(T)}>Eliminated 💀</div>
@@ -1133,30 +1154,70 @@ const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:HISTORY[0].loa
 {id:"emerg",name:"Emergency Fund",cur:cur.sav+(cur.jnt),max:10000,icon:"🛡️"}];
 const gl=userGoals||defaultGoals.map(g=>({id:g.id,name:g.name,max:g.max,icon:g.icon}));
 const totalContrib=gid=>(goalContribs[gid]||[]).reduce((s,c)=>s+c.amt,0);
-const addContrib=(gid,amt,note)=>{setGoalContribs(p=>({...p,[gid]:[...(p[gid]||[]),{amt:+amt,date:now.toISOString().split("T")[0],note:note||""}]}))};
+const[editId,setEditId]=useState(null);const[ef,setEf]=useState({});
+const[addOpen,setAddOpen]=useState(false);const[nf,setNf]=useState({name:"",max:"",icon:"🎯"});
+const[logId,setLogId]=useState(null);const[logAmt,setLogAmt]=useState("");const[logNote,setLogNote]=useState("");
+
+const addGoal=()=>{if(!nf.name||!nf.max)return;setUserGoals([...gl,{id:"g"+Date.now(),name:nf.name,max:+nf.max,icon:nf.icon}]);setNf({name:"",max:"",icon:"🎯"});setAddOpen(false)};
+const saveGoalEdit=()=>{setUserGoals(gl.map(g=>g.id===editId?{...g,name:ef.name,max:+ef.max,icon:ef.icon}:g));setEditId(null)};
+const deleteGoal=(id)=>setUserGoals(gl.filter(g=>g.id!==id));
+const addContrib=(gid)=>{if(!logAmt)return;setGoalContribs(p=>({...p,[gid]:[...(p[gid]||[]),{amt:+logAmt,date:now.toISOString().split("T")[0],note:logNote||""}]}));setLogAmt("");setLogNote("");setLogId(null)};
+const removeContrib=(gid,idx)=>{setGoalContribs(p=>({...p,[gid]:(p[gid]||[]).filter((_,i)=>i!==idx)}))};
+
+const icons=["🏆","🎯","✈️","📈","🛡️","💰","🏠","🚗","🎓","💪","🔥","⭐","💎","🌍","🏃"];
+
 return(<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
 <div style={{fontSize:18,fontWeight:700}}>Goals</div>
-<button onClick={()=>{const n=prompt("Goal name:");const t=prompt("Target amount:");if(n&&t){setUserGoals([...gl,{id:"g"+Date.now(),name:n,max:+t,icon:"🎯"}])}}} style={btnS(T,true)}><Plus size={11}/>New Goal</button></div>
+<button onClick={()=>setAddOpen(!addOpen)} style={btnS(T,true)}><Plus size={11}/>New Goal</button></div>
+
+{addOpen&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
+<div style={{display:"flex",gap:8,alignItems:"end",flexWrap:"wrap"}}>
+<div style={{width:60}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Icon</div>
+<div style={{display:"flex",flexWrap:"wrap",gap:3}}>{icons.slice(0,10).map(ic=><button key={ic} onClick={()=>setNf(p=>({...p,icon:ic}))} style={{fontSize:16,background:nf.icon===ic?T.purpleBg:"transparent",border:`1px solid ${nf.icon===ic?T.purple:T.border}`,borderRadius:6,cursor:"pointer",width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>)}</div></div>
+<div style={{flex:1,minWidth:120}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Goal Name</div><input placeholder="Save for X" value={nf.name} onChange={e=>setNf(p=>({...p,name:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:100}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Target $</div><input type="number" placeholder="10000" value={nf.max} onChange={e=>setNf(p=>({...p,max:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
+<button onClick={addGoal} style={btnS(T,true)}><Check size={12}/></button></div></div>}
+
 {gl.map(g=>{const dg=defaultGoals.find(d=>d.id===g.id);const curVal=dg?dg.cur:totalContrib(g.id);const max=g.max||dg?.max||1;
-const pct=g.id==="debt"?((max-curVal)/max*100):(curVal/max*100);const contribs=goalContribs[g.id]||[];
+const pct=g.id==="debt"?((max-curVal)/max*100):Math.min(curVal/max*100,999);const contribs=goalContribs[g.id]||[];const toGo=g.id==="debt"?curVal:Math.max(max-curVal,0);
+const isEditing=editId===g.id;
 return(<div key={g.id} style={{...glass(T),marginBottom:12}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:22}}>{g.icon}</span>
-<div><div style={{fontSize:14,fontWeight:700}}>{g.name}</div>
-<div style={{fontSize:10,color:T.textDim}}>{fmt(curVal)} of {fmt(max)}</div></div></div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+{isEditing?<div style={{display:"flex",flexWrap:"wrap",gap:2}}>{icons.slice(0,8).map(ic=><button key={ic} onClick={()=>setEf(p=>({...p,icon:ic}))} style={{fontSize:14,background:ef.icon===ic?T.purpleBg:"transparent",border:`1px solid ${ef.icon===ic?T.purple:"transparent"}`,borderRadius:4,cursor:"pointer",padding:2}}>{ic}</button>)}</div>
+:<span style={{fontSize:22}}>{g.icon}</span>}
+<div>{isEditing?(<div style={{display:"flex",gap:6,alignItems:"center"}}>
+<input value={ef.name} onChange={e=>setEf(p=>({...p,name:e.target.value}))} style={{...inpS(T),fontSize:13,fontWeight:700,padding:"4px 8px",width:140}}/>
+<span style={{fontSize:10,color:T.textDim}}>Target: $</span>
+<input type="number" value={ef.max} onChange={e=>setEf(p=>({...p,max:e.target.value}))} style={{...inpS(T),fontSize:13,padding:"4px 8px",width:80}}/></div>
+):(<><div style={{fontSize:14,fontWeight:700}}>{g.name}</div>
+<div style={{fontSize:10,color:T.textDim}}>{fmt(curVal)} of {fmt(max)}{g.id==="europe"?` • ${euroDays} days left`:""}</div></>)}</div></div>
 <div style={{display:"flex",gap:4}}>
-<button onClick={()=>{const a=prompt("Amount:");if(a)addContrib(g.id,a,prompt("Note:"))}} style={btnS(T,true)}><Plus size={10}/>Log</button>
-{!dg&&<button onClick={()=>setUserGoals(gl.filter(x=>x.id!==g.id))} style={{...btnS(T,false),color:T.danger}}><Trash2 size={10}/></button>}</div></div>
+{isEditing?(<><button onClick={saveGoalEdit} style={{...btnS(T,true),fontSize:10,padding:"4px 8px"}}><Check size={10}/>Save</button>
+<button onClick={()=>setEditId(null)} style={{...btnS(T,false),fontSize:10,padding:"4px 8px"}}><X size={10}/></button></>
+):(<><button onClick={()=>{setLogId(logId===g.id?null:g.id);setLogAmt("");setLogNote("")}} style={btnS(T,true)}><Plus size={10}/>Log</button>
+<button onClick={()=>{setEditId(g.id);setEf({name:g.name,max:g.max||max,icon:g.icon})}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button>
+{!dg&&<button onClick={()=>deleteGoal(g.id)} style={{background:"none",border:"none",color:T.danger,cursor:"pointer",opacity:.4}}><Trash2 size={12}/></button>}</>)}</div></div>
+
+{logId===g.id&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,padding:"8px 10px",background:T.bg,borderRadius:8}}>
+<input type="number" value={logAmt} onChange={e=>setLogAmt(e.target.value)} placeholder="Amount" onKeyDown={e=>e.key==="Enter"&&addContrib(g.id)} style={{...inpS(T),flex:1,fontSize:12}}/>
+<input value={logNote} onChange={e=>setLogNote(e.target.value)} placeholder="Note (optional)" onKeyDown={e=>e.key==="Enter"&&addContrib(g.id)} style={{...inpS(T),flex:1,fontSize:12}}/>
+<button onClick={()=>addContrib(g.id)} style={btnS(T,true)}><Check size={11}/></button></div>}
+
 <PBar pct={Math.min(pct,100)} color={pct>=100?T.success:pct>60?T.info:T.warn} height={8} bg={T.border}/>
 <div style={{display:"flex",gap:12,fontSize:10,color:T.textDim,marginTop:8}}>
-<span><strong style={{color:T.text}}>{pct.toFixed(0)}%</strong> complete</span>
-<span><strong style={{color:T.text}}>{fmt(max-curVal)}</strong> to go</span></div>
+<span><strong style={{color:T.text}}>{Math.min(pct,999).toFixed(0)}%</strong> complete</span>
+<span><strong style={{color:T.text}}>{fmt(toGo)}</strong> {g.id==="debt"?"remaining":"to go"}</span>
+{g.id==="europe"&&<span><strong style={{color:T.warn}}>{fmt(toGo/Math.max(euroDays/7,1))}</strong>/week needed</span>}</div>
+
 {contribs.length>0&&<div style={{borderTop:`1px solid ${T.border}`,paddingTop:8,marginTop:8}}>
 <div style={{fontSize:9,color:T.textDim,fontWeight:700,marginBottom:4}}>HISTORY</div>
-{contribs.slice(-5).reverse().map((c,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:10,padding:"3px 0",borderBottom:`1px solid ${T.border}`}}>
-<span style={{color:T.textDim}}>{c.date} {c.note&&"— "+c.note}</span>
-<span style={{fontWeight:600,color:T.success}}>+{fmt(c.amt)}</span></div>)}</div>}
+{contribs.slice(-5).reverse().map((c,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,padding:"3px 0",borderBottom:`1px solid ${T.border}`}}>
+<span style={{color:T.textDim}}>{c.date}{c.note?" — "+c.note:""}</span>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+<span style={{fontWeight:600,color:T.success}}>+{fmt(c.amt)}</span>
+<button onClick={()=>removeContrib(g.id,contribs.length-1-i)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.2}}><X size={9}/></button></div></div>)}</div>}
 </div>)})}</div>)}
 
 function ReportPage({T,cats,byCat,totS,totB,savR}){
@@ -1203,20 +1264,36 @@ return(<div>
 <div style={lbl(T)}>Log Score</div>
 <div style={{display:"flex",gap:8,alignItems:"end"}}>
 <div style={{flex:1}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Score</div>
-<input type="number" value={csForm.score} onChange={e=>setCsForm(p=>({...p,score:e.target.value}))} placeholder="740" style={inpS(T)}/></div>
+<input type="number" value={csForm.score} onChange={e=>setCsForm(p=>({...p,score:e.target.value}))} placeholder="0" style={inpS(T)}/></div>
 <div style={{flex:1}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Month</div>
 <input type="month" value={csForm.date} onChange={e=>setCsForm(p=>({...p,date:e.target.value}))} style={inpS(T)}/></div>
 <button onClick={addScore} disabled={!csForm.score} style={{...btnS(T,true),opacity:csForm.score?1:.5}}><Plus size={12}/>Add</button></div>
 {!latest&&<div style={{textAlign:"center",padding:20,color:T.textDim,fontSize:12}}>No scores logged yet. Add your first one above.</div>}</div></div>)}
 
-function CalPage({T,months,calMo,setCalMo,calYr,setCalYr}){
+function CalPage({T,months,calMo,setCalMo,calYr,setCalYr,recurring,billsPaid}){
 const dim=new Date(calYr,calMo+1,0).getDate();const off=(new Date(calYr,calMo,1).getDay()+6)%7;
 const mk=`${MO[calMo]}'${String(calYr).slice(2)}`;const txns=months[mk]?.txns||[];
-const dt={};txns.forEach(t=>{const d=parseInt(t.d.split("-")[2]);dt[d]=(dt[d]||0)+t.amt});
+const dt={};txns.filter(t=>!t.isBill).forEach(t=>{const d=parseInt(t.d.split("-")[2]);dt[d]=(dt[d]||0)+t.amt});
+const billDues={};(recurring||[]).forEach(r=>{if(r.due>0&&r.due<=dim){if(!billDues[r.due])billDues[r.due]=[];billDues[r.due].push(r)}});
+const paidSet=new Set(billsPaid?.[mk]||[]);
 const mx=Math.max(...Object.values(dt),1);
 const gc=a=>{if(!a)return T.border+"30";const i=Math.min(a/mx,1);return i<.3?T.success+"50":i<.6?T.warn+"60":T.danger+"80"};
 const prev=()=>{if(calMo===0){setCalMo(11);setCalYr(calYr-1)}else setCalMo(calMo-1)};
 const next=()=>{if(calMo===11){setCalMo(0);setCalYr(calYr+1)}else setCalMo(calMo+1)};
+const[selDay,setSelDay]=useState(null);
+
+// Sunday analysis
+const sundays=[];for(let d=1;d<=dim;d++){if(new Date(calYr,calMo,d).getDay()===0)sundays.push(d)}
+const today=new Date();const curDay=calMo===today.getMonth()&&calYr===today.getFullYear()?today.getDate():0;
+const lastSun=sundays.filter(d=>d<=curDay).pop();
+const nextSun=sundays.find(d=>d>curDay);
+
+// Week spending (Mon-Sun)
+const weekSpend=(sunDay)=>{const monDay=sunDay-6;return txns.filter(t=>!t.isBill).filter(t=>{const d=parseInt(t.d.split("-")[2]);return d>=monDay&&d<=sunDay}).reduce((s,t)=>s+t.amt,0)};
+
+const totalSpend=txns.filter(t=>!t.isBill).reduce((s,t)=>s+t.amt,0);
+const totalBills=txns.filter(t=>t.isBill).reduce((s,t)=>s+t.amt,0);
+
 return(<div>
 <div style={{...glass(T),marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -1224,15 +1301,61 @@ return(<div>
 <div style={{fontSize:18,fontWeight:700}}>{MO[calMo]} {calYr}</div>
 <button onClick={next} style={btnS(T,false)}><ChevronRight size={14}/></button></div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
-{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=><div key={d} style={{fontSize:10,textAlign:"center",color:T.textDim,fontWeight:600,padding:4}}>{d}</div>)}
+{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=><div key={d} style={{fontSize:10,textAlign:"center",color:d==="Sun"?T.purple:T.textDim,fontWeight:600,padding:4}}>{d}</div>)}
 {Array.from({length:off},(_,i)=><div key={`p${i}`}/>)}
-{Array.from({length:dim},(_,i)=>{const day=i+1;const a=dt[day]||0;const isToday=day===new Date().getDate()&&calMo===new Date().getMonth()&&calYr===new Date().getFullYear();
-return(<div key={day} style={{padding:8,borderRadius:8,background:gc(a),border:isToday?`2px solid ${T.success}`:`1px solid ${T.border}30`,minHeight:48,cursor:a?"pointer":"default"}}>
-<div style={{fontSize:10,fontWeight:isToday?700:500,color:isToday?T.success:T.text}}>{day}</div>
-{a>0&&<div style={{fontSize:9,fontWeight:600,color:T.danger,marginTop:2}}>{fmt(a)}</div>}
+{Array.from({length:dim},(_,i)=>{const day=i+1;const a=dt[day]||0;const bills=billDues[day]||[];const isSunday=new Date(calYr,calMo,day).getDay()===0;
+const isToday=day===today.getDate()&&calMo===today.getMonth()&&calYr===today.getFullYear();
+return(<div key={day} onClick={()=>setSelDay(selDay===day?null:day)} style={{padding:6,borderRadius:8,background:isSunday?T.purpleBg:gc(a),border:isToday?`2px solid ${T.success}`:`1px solid ${T.border}30`,minHeight:54,cursor:"pointer",position:"relative"}}>
+<div style={{fontSize:10,fontWeight:isToday?700:500,color:isToday?T.success:isSunday?T.purple:T.text}}>{day}</div>
+{a>0&&<div style={{fontSize:8,fontWeight:600,color:T.danger,marginTop:1}}>{fmt(a)}</div>}
+{bills.length>0&&<div style={{fontSize:7,color:T.info,marginTop:1}}>{bills.length} bill{bills.length>1?"s":""}</div>}
+{isSunday&&<div style={{position:"absolute",top:4,right:4,width:5,height:5,borderRadius:"50%",background:T.purple}}/>}
 </div>)})}</div></div>
-{txns.length>0&&<div style={glass(T)}><div style={lbl(T)}>Transactions this month</div>
-<div style={{fontSize:12,color:T.textMuted}}>{txns.length} transactions totaling <strong style={{color:T.danger}}>{fmt(txns.reduce((s,t)=>s+t.amt,0))}</strong></div></div>}</div>)}
+
+{selDay&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={lbl(T)}>{MO[calMo]} {selDay}</div>
+<button onClick={()=>setSelDay(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={14}/></button></div>
+{(billDues[selDay]||[]).length>0&&<div style={{marginBottom:8}}>
+<div style={{fontSize:10,color:T.info,fontWeight:700,marginBottom:4}}>BILLS DUE</div>
+{(billDues[selDay]||[]).map((b,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0"}}>
+<span>{b.desc}</span><span style={{fontWeight:600,color:T.info}}>{fmt(b.amt)}</span></div>)}</div>}
+{txns.filter(t=>{const d=parseInt(t.d.split("-")[2]);return d===selDay&&!t.isBill}).length>0&&<div>
+<div style={{fontSize:10,color:T.textDim,fontWeight:700,marginBottom:4}}>TRANSACTIONS</div>
+{txns.filter(t=>{const d=parseInt(t.d.split("-")[2]);return d===selDay&&!t.isBill}).map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:`1px solid ${T.border}`}}>
+<span>{t.desc}</span><span style={{fontWeight:600,color:T.danger}}>{fmt(t.amt)}</span></div>)}</div>}
+{!(billDues[selDay]||[]).length&&!txns.some(t=>parseInt(t.d.split("-")[2])===selDay&&!t.isBill)&&<div style={{fontSize:11,color:T.textDim}}>Nothing on this day</div>}
+</div>}
+
+{lastSun&&<div style={{...glass(T),marginBottom:14,borderLeft:`3px solid ${T.purple}`}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div><div style={{fontSize:12,fontWeight:700,color:T.purple}}>📊 Sunday Analysis — {MO[calMo]} {lastSun}</div>
+<div style={{fontSize:10,color:T.textDim,marginTop:2}}>Week of {MO[calMo]} {lastSun-6}–{lastSun}</div></div>
+<div style={{fontSize:18,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(weekSpend(lastSun))}</div></div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:10}}>
+<div><div style={{fontSize:9,color:T.textDim}}>Week spend</div><div style={{fontSize:14,fontWeight:700,color:T.danger}}>{fmt(weekSpend(lastSun))}</div></div>
+<div><div style={{fontSize:9,color:T.textDim}}>Month so far</div><div style={{fontSize:14,fontWeight:700,color:T.text}}>{fmt(totalSpend)}</div></div>
+<div><div style={{fontSize:9,color:T.textDim}}>Bills paid</div><div style={{fontSize:14,fontWeight:700,color:T.info}}>{fmt(totalBills)}</div></div></div>
+{nextSun&&<div style={{fontSize:10,color:T.textDim,marginTop:8}}>Next analysis: {MO[calMo]} {nextSun}</div>}
+</div>}
+
+<div style={{...glass(T),marginBottom:14}}>
+<div style={lbl(T)}>Upcoming Bills</div>
+{(recurring||[]).filter(r=>r.due>0&&r.due>curDay&&r.due<=dim).sort((a,b)=>a.due-b.due).slice(0,8).map((b,i)=>(
+<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={{width:28,height:28,borderRadius:6,background:T.infoBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:T.info}}>{b.due}</div>
+<span style={{fontSize:12,fontWeight:600}}>{b.desc}</span></div>
+<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(b.amt)}</span></div>))}
+{(recurring||[]).filter(r=>r.due>0&&r.due>curDay&&r.due<=dim).length===0&&<div style={{fontSize:11,color:T.textDim,padding:10}}>All bills paid or no upcoming bills this month</div>}</div>
+
+<div style={glass(T)}><div style={lbl(T)}>Month Summary</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+<div><div style={{fontSize:9,color:T.textDim}}>Transactions</div><div style={{fontSize:16,fontWeight:700}}>{txns.filter(t=>!t.isBill).length}</div></div>
+<div><div style={{fontSize:9,color:T.textDim}}>Spending</div><div style={{fontSize:16,fontWeight:700,color:T.danger}}>{fmt(totalSpend)}</div></div>
+<div><div style={{fontSize:9,color:T.textDim}}>Bills</div><div style={{fontSize:16,fontWeight:700,color:T.info}}>{fmt(totalBills)}</div></div></div></div>
+</div>)}
+
 
 function PlaceholderPage({title,icon:Icon,T}){return(
 <div style={{...glass(T),textAlign:"center",padding:60}}>
@@ -1435,7 +1558,7 @@ case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
 case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
 case"report":return<ReportPage T={T} cats={cats} byCat={byCat} totS={totS} totB={totB} savR={savR}/>;
 case"credit":return<CreditPage T={T} cScores={cScores} setCScores={setCScores} csForm={csForm} setCsForm={setCsForm}/>;
-case"cal":return<CalPage T={T} months={months} calMo={calMo} setCalMo={setCalMo} calYr={calYr} setCalYr={setCalYr}/>;
+case"cal":return<CalPage T={T} months={months} calMo={calMo} setCalMo={setCalMo} calYr={calYr} setCalYr={setCalYr} recurring={recurring} billsPaid={billsPaid}/>;
 case"settings":return(
 <div style={glass(T)}>
 <div style={{fontSize:18,fontWeight:700,marginBottom:20}}>Settings</div>
