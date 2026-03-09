@@ -591,9 +591,9 @@ return(<div>
 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
 {paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name}</div>)}</div></div>}</div>)}
 
-function BillsPage({T,recurring,setRecurring,subs,billsPaid,setBillsPaid,mo,addTxnsSmart}){
-const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,desc:r.desc,amt:r.amt,cat:r.cat,type:"bill",src:"recurring"})),
-...subs.filter(s=>s.st==="active").map((s,i)=>({id:`s_${i}`,desc:s.n,amt:s.a,cat:s.cat,type:"sub",src:"subscription",card:s.card}))];
+function BillsPage({T,recurring,setRecurring,subs,setSubs,billsPaid,setBillsPaid,mo,addTxnsSmart}){
+const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,idx:i,desc:r.desc,amt:r.amt,cat:r.cat,type:"bill",src:"recurring"})),
+...subs.filter(s=>s.st==="active").map((s,i)=>({id:`s_${i}`,idx:i,desc:s.n,amt:s.a,cat:s.cat,type:"sub",src:"subscription",card:s.card,origIdx:subs.indexOf(s)}))];
 const paidSet=new Set(billsPaid[mo]||[]);
 const paidCount=allBills.filter(b=>paidSet.has(b.id)).length;
 const totalAmt=allBills.reduce((s,b)=>s+b.amt,0);
@@ -601,6 +601,7 @@ const paidAmt=allBills.filter(b=>paidSet.has(b.id)).reduce((s,b)=>s+b.amt,0);
 const remainAmt=totalAmt-paidAmt;
 const pctDone=allBills.length>0?(paidCount/allBills.length*100):0;
 const[showAdd,setShowAdd]=useState(false);const[newBill,setNewBill]=useState({desc:"",amt:"",cat:"misc"});
+const[editId,setEditId]=useState(null);const[editField,setEditField]=useState("");const[editVal,setEditVal]=useState("");
 
 const togglePaid=(bill)=>{const cur=new Set(billsPaid[mo]||[]);
 if(cur.has(bill.id)){cur.delete(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}))}
@@ -608,7 +609,16 @@ else{cur.add(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}));
 addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc,amt:bill.amt,cat:bill.cat||"misc",card:"debit"}])}};
 
 const addBill=()=>{if(!newBill.desc||!newBill.amt)return;setRecurring(p=>[...p,{desc:newBill.desc,amt:+newBill.amt,cat:newBill.cat}]);setNewBill({desc:"",amt:"",cat:"misc"});setShowAdd(false)};
-const removeBill=(idx)=>setRecurring(p=>p.filter((_,i)=>i!==idx));
+
+const removeBill=(b)=>{if(b.src==="recurring"){setRecurring(p=>p.filter((_,i)=>i!==b.idx))}
+else{setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,st:"cancelled"}:s))}
+const cur=new Set(billsPaid[mo]||[]);cur.delete(b.id);setBillsPaid(p=>({...p,[mo]:[...cur]}))};
+
+const startEdit=(b,field)=>{setEditId(b.id);setEditField(field);setEditVal(field==="amt"?String(b.amt):b.desc)};
+const saveEdit=(b)=>{if(b.src==="recurring"){
+setRecurring(p=>p.map((r,i)=>i===b.idx?(editField==="amt"?{...r,amt:+editVal}:{...r,desc:editVal}):r))}
+else{setSubs(p=>p.map((s,i)=>i===b.origIdx?(editField==="amt"?{...s,a:+editVal}:{...s,n:editVal}):s))}
+setEditId(null)};
 
 return(<div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14}}>
@@ -628,28 +638,39 @@ return(<div>
 <button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={11}/>Add Bill</button></div>
 
 {showAdd&&<div style={{display:"flex",gap:8,marginBottom:14,padding:12,background:T.bg,borderRadius:10}}>
-<input placeholder="Bill name" value={newBill.desc} onChange={e=>setNewBill(p=>({...p,desc:e.target.value}))} style={{...inpS(T),flex:1,fontSize:11}}/>
-<input type="number" placeholder="$" value={newBill.amt} onChange={e=>setNewBill(p=>({...p,amt:e.target.value}))} style={{...inpS(T),width:80,fontSize:11}}/>
+<input placeholder="Bill name" value={newBill.desc} onChange={e=>setNewBill(p=>({...p,desc:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addBill()} style={{...inpS(T),flex:1,fontSize:11}}/>
+<input type="number" placeholder="$" value={newBill.amt} onChange={e=>setNewBill(p=>({...p,amt:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addBill()} style={{...inpS(T),width:80,fontSize:11}}/>
 <button onClick={addBill} style={btnS(T,true)}><Check size={12}/></button></div>}
 
-{allBills.map((b,i)=>{const paid=paidSet.has(b.id);
+{allBills.map((b,i)=>{const paid=paidSet.has(b.id);const isEditing=editId===b.id;
 return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:i<allBills.length-1?`1px solid ${T.border}`:"none",opacity:paid?.65:1,transition:"all .2s"}}>
 <button onClick={()=>togglePaid(b)} style={{width:28,height:28,borderRadius:8,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s",flexShrink:0}}>
 {paid&&<Check size={14} color="#080c18"/>}</button>
 <div style={{flex:1}}>
-<div style={{fontSize:13,fontWeight:600,textDecoration:paid?"line-through":"none",color:paid?T.textDim:T.text}}>{b.desc}</div>
+{isEditing&&editField==="desc"?(
+<div style={{display:"flex",gap:4}}><input value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),fontSize:12,padding:"4px 8px"}} autoFocus/>
+<button onClick={()=>saveEdit(b)} style={{background:"none",border:"none",color:T.success,cursor:"pointer"}}><Check size={12}/></button></div>
+):(
+<div onClick={()=>!paid&&startEdit(b,"desc")} style={{fontSize:13,fontWeight:600,textDecoration:paid?"line-through":"none",color:paid?T.textDim:T.text,cursor:paid?"default":"pointer"}} title={paid?"":"Click to edit name"}>{b.desc}</div>
+)}
 <div style={{display:"flex",gap:6,marginTop:2}}>
 <span style={pill(b.type==="bill"?T.infoBg:T.purpleBg,b.type==="bill"?T.info:T.purple)}>{b.type==="bill"?"📋 Bill":"🔄 Sub"}</span>
 {b.card&&<span style={{fontSize:9,color:T.textDim}}>{b.card}</span>}
 </div></div>
-<div style={{fontSize:15,fontWeight:700,fontFamily:"'Space Mono',monospace",color:paid?T.success:T.text}}>{fmt(b.amt)}</div>
+{isEditing&&editField==="amt"?(
+<div style={{display:"flex",gap:4,alignItems:"center"}}><span style={{fontSize:11,color:T.textDim}}>$</span>
+<input type="number" value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:70,fontSize:13,padding:"4px 8px",fontFamily:"'Space Mono',monospace"}} autoFocus/>
+<button onClick={()=>saveEdit(b)} style={{background:"none",border:"none",color:T.success,cursor:"pointer"}}><Check size={12}/></button></div>
+):(
+<div onClick={()=>!paid&&startEdit(b,"amt")} style={{fontSize:15,fontWeight:700,fontFamily:"'Space Mono',monospace",color:paid?T.success:T.text,cursor:paid?"default":"pointer",minWidth:70,textAlign:"right"}} title={paid?"":"Click to edit amount"}>{fmt(b.amt)}</div>
+)}
 <div style={pill(paid?T.successBg:T.warnBg,paid?T.success:T.warn)}>{paid?"Paid":"Due"}</div>
-{b.src==="recurring"&&<button onClick={()=>removeBill(recurring.findIndex(r=>r.desc===b.desc))} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Trash2 size={11}/></button>}
+<button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}} title="Remove"><Trash2 size={11}/></button>
 </div>)})}
 </div>
 
 <div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
-<span>✓ Marking "Paid" auto-logs as transaction</span>
+<span>✓ Marking "Paid" auto-logs as transaction • Click name or amount to edit</span>
 <span>Annual: <strong style={{color:T.warn}}>{fmt(totalAmt*12)}</strong>/yr</span></div>
 </div>)}
 
@@ -988,7 +1009,7 @@ case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTx
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
-case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} mo={mo} addTxnsSmart={addTxnsSmart}/>;
+case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} mo={mo} addTxnsSmart={addTxnsSmart}/>;
 case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
 case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
 case"report":return<ReportPage T={T} cats={cats} byCat={byCat} totS={totS} totB={totB} savR={savR}/>;
