@@ -538,10 +538,10 @@ return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:5,padding:
 filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat]||0;const catBudget=cat?.budget||0;const catPct=catBudget>0?(catSpent/catBudget*100):0;const catColor=catPct>100?T.danger:catPct>80?T.warn:T.success;return(
 <tr key={t.id} style={{borderBottom:`1px solid ${T.border}`,transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
 <td style={{padding:"10px 14px",fontSize:12,color:T.textDim}}>{t.d}</td>
-<td style={{padding:"10px 14px",fontSize:12,fontWeight:600}}>{t.desc}</td>
+<td style={{padding:"10px 14px",fontSize:12,fontWeight:600}}>{t.desc}{t.isBill&&<span style={{...pill(T.purpleBg,T.purple),marginLeft:6,fontSize:8}}>BILL</span>}</td>
 <td style={{padding:"10px 14px"}}>
 <span style={pill((cat?T.infoBg:T.border),cat?T.info:T.textDim)}>{cat?.icon||"📦"} {cat?.name||t.cat}</span>
-{catBudget>0&&<div style={{marginTop:4,display:"flex",alignItems:"center",gap:6}}>
+{catBudget>0&&!t.isBill&&<div style={{marginTop:4,display:"flex",alignItems:"center",gap:6}}>
 <div style={{width:60,height:3,borderRadius:2,background:T.border,overflow:"hidden",flexShrink:0}}>
 <div style={{width:`${Math.min(catPct,100)}%`,height:"100%",borderRadius:2,background:catColor,transition:"width .4s"}}/></div>
 <span style={{fontSize:9,color:catColor,fontWeight:600,fontFamily:"'Space Mono',monospace"}}>{fmt(catSpent)}<span style={{color:T.textDim,fontWeight:400}}>/{fmt(catBudget)}</span></span></div>}
@@ -551,7 +551,7 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat
 <td style={{padding:"10px 14px"}}><button onClick={()=>delTxn(t.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}} title="Delete"><Trash2 size={12}/></button></td>
 </tr>)})}</tbody></table></div>
 <div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
-<span>{filtered.length} transactions</span><span>Total: <strong style={{color:T.danger}}>{fmt(filtered.reduce((s,t)=>s+t.amt,0))}</strong></span></div></div>)}
+<span>{filtered.length} transactions</span><span>Spending: <strong style={{color:T.danger}}>{fmt(filtered.filter(t=>!t.isBill).reduce((s,t)=>s+t.amt,0))}</strong>{filtered.some(t=>t.isBill)&&<span style={{color:T.textDim}}> + Bills: <strong style={{color:T.purple}}>{fmt(filtered.filter(t=>t.isBill).reduce((s,t)=>s+t.amt,0))}</strong></span>}</span></div></div>)}
 
 function BudgetPage({T,cats,setCats,byCat,totS,totB}){
 const[editId,setEditId]=useState(null);const[editVal,setEditVal]=useState("");
@@ -635,8 +635,8 @@ const togglePaid=(bill)=>{const cur=new Set(billsPaid[mo]||[]);
 if(cur.has(bill.id)){cur.delete(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}))}
 else{cur.add(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}));
 const sp=moSplits[bill.id];const gregAmt=sp?bill.amt*(1-sp.pct/100):bill.amt;
-addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (Greg ${100-sp.pct}%)`:""),amt:Math.round(gregAmt*100)/100,cat:bill.cat||"misc",card:"debit"}]);
-if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (Sarah ${sp.pct}%)`,amt:Math.round(bill.amt*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit"}])}}};
+addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (Greg ${100-sp.pct}%)`:""),amt:Math.round(gregAmt*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}]);
+if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (Sarah ${sp.pct}%)`,amt:Math.round(bill.amt*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}])}}};
 
 const addBill=()=>{if(!newBill.desc||!newBill.amt)return;setRecurring(p=>[...p,{desc:newBill.desc,amt:+newBill.amt,cat:newBill.cat}]);setNewBill({desc:"",amt:"",cat:"misc"});setShowAdd(false)};
 const removeBill=(b)=>{if(b.src==="recurring")setRecurring(p=>p.filter((_,i)=>i!==b.idx));
@@ -1016,14 +1016,14 @@ else if(addedCount>=5)showToast("⚡","Bulk Import!",`${addedCount} transactions
 else if(Math.random()<0.08)showToast(["💰","🪙","📊","✨","🎯"][Math.floor(Math.random()*5)],"Logged!",
 ["Money tracked is money managed","Every dollar accounted for","Building that financial awareness","Data is power","One step closer to freedom"][Math.floor(Math.random()*5)],T.success)};
 
-const totD=debts.reduce((s,d)=>s+(d.bal||0),0);const totS=txns.reduce((s,t)=>s+t.amt,0);const totB=cats.reduce((s,c)=>s+c.budget,0);
+const totD=debts.reduce((s,d)=>s+(d.bal||0),0);const spendTxns=txns.filter(t=>!t.isBill);const totS=spendTxns.reduce((s,t)=>s+t.amt,0);const totB=cats.reduce((s,c)=>s+c.budget,0);const billTxns=txns.filter(t=>t.isBill);const totBills=billTxns.reduce((s,t)=>s+t.amt,0);
 const cur={...HISTORY[HISTORY.length-1],sav:bal.sav,ira:bal.ira,stk:bal.stk,jnt:bal.jnt,inc:bal.inc,fix:bal.fix,loans:totD};
 const prev=HISTORY[HISTORY.length-2];
 const nw=(cur.sav+cur.ira+cur.stk+cur.jnt/2)-cur.loans;
 const nwP=(prev.sav+prev.ira+prev.stk+prev.jnt/2)-prev.loans;
 const savR=cur.inc>0?((cur.inc-cur.fix-totS)/cur.inc*100):0;
 const dim=dimOf(mo);
-const byCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);txns.forEach(t=>{if(m[t.cat]!==undefined)m[t.cat]+=t.amt});return m},[txns,cats]);
+const byCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);txns.filter(t=>!t.isBill).forEach(t=>{if(m[t.cat]!==undefined)m[t.cat]+=t.amt});return m},[txns,cats]);
 const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]),MO.indexOf(p[0]),1).getDay()+6)%7},[mo]);
 
 const insights=useMemo(()=>{
