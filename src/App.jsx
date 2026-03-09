@@ -394,13 +394,15 @@ placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),b
 <SpendHeatmap txns={txns} dim={dim} off={mOff} T={T}/></div></div>)}
 
 function TxnPage({T,txns,setTxns,addTxnsSmart,cats,byCat,mo,apiKey,aiModel,callAI,provider}){
-const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[showAdd,setShowAdd]=useState(false);
+const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[cardF,setCardF]=useState("");const[showAdd,setShowAdd]=useState(false);
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
 const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResults]=useState(null);const[scanError,setScanError]=useState("");
 const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");const[csvBank,setCsvBank]=useState("chase");const[csvParsed,setCsvParsed]=useState([]);
+const[editCardId,setEditCardId]=useState(null);
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
-const filtered=useMemo(()=>{let f=[...txns];if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF]);
+const byCard=useMemo(()=>{const m={};txns.filter(t=>!t.isBill).forEach(t=>{m[t.card]=(m[t.card]||0)+t.amt});return m},[txns]);
+const filtered=useMemo(()=>{let f=[...txns];if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);if(cardF)f=f.filter(t=>t.card===cardF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF,cardF]);
 const addTxn=()=>{if(!af.desc||!af.amt)return;addTxnsSmart([{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card}]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
 const delTxn=id=>setTxns(p=>p.filter(t=>t.id!==id));
 
@@ -438,7 +440,9 @@ return(<div>
 <div style={{position:"relative",flex:1}}><Search size={14} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textDim}}/>
 <input placeholder="Search..." value={filt} onChange={e=>setFilt(e.target.value)} style={{...inpS(T),paddingLeft:32,fontSize:12}}/></div>
 <select value={catF} onChange={e=>setCatF(e.target.value)} style={{...inpS(T),width:"auto",fontSize:11,padding:"8px 12px"}}>
-<option value="">All Categories</option>{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select></div>
+<option value="">All Categories</option>{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select>
+<select value={cardF} onChange={e=>setCardF(e.target.value)} style={{...inpS(T),width:"auto",fontSize:11,padding:"8px 12px"}}>
+<option value="">All Cards</option>{Object.entries(CARD_MAP).map(([k,v])=><option key={k} value={k}>{v}{byCard[k]?` (${fmt(byCard[k])})`:""}</option>)}</select></div>
 <div style={{display:"flex",gap:8}}>
 <button onClick={()=>{setScanMode(!scanMode);setShowAdd(false);setCsvMode(false)}} style={{...btnS(T,scanMode),background:scanMode?T.purple:undefined,color:scanMode?"#fff":T.text}}><Camera size={12}/>Scan</button>
 <button onClick={()=>{setCsvMode(!csvMode);setShowAdd(false);setScanMode(false)}} style={{...btnS(T,csvMode),background:csvMode?T.info:undefined,color:csvMode?"#fff":T.text}}><Upload size={12}/>CSV</button>
@@ -531,6 +535,11 @@ return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:5,padding:
 <span style={{fontSize:12}}>{c.icon}</span>
 <div style={{width:30,height:3,borderRadius:2,background:T.border,overflow:"hidden"}}><div style={{width:`${Math.min(pct,100)}%`,height:"100%",borderRadius:2,background:col}}/></div>
 <span style={{fontWeight:600,color:col,fontFamily:"'Space Mono',monospace"}}>{pct.toFixed(0)}%</span></div>)})}</div>
+<div style={{padding:"8px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,overflowX:"auto"}}>
+{Object.entries(CARD_MAP).filter(([k])=>(byCard[k]||0)>0).map(([k,v])=>(
+<button key={k} onClick={()=>setCardF(cardF===k?"":k)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`1px solid ${cardF===k?T.info:T.border}`,background:cardF===k?T.infoBg:"transparent",cursor:"pointer",flexShrink:0,fontSize:10,color:cardF===k?T.info:T.textMuted,fontWeight:600}}>
+<CreditCard size={10}/>{v}
+<span style={{fontFamily:"'Space Mono',monospace",color:T.text}}>{fmt(byCard[k])}</span></button>))}</div>
 <table style={{width:"100%",borderCollapse:"collapse"}}>
 <thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
 {["Date","Description","Category","Card","Amount",""].map((h,i)=><th key={i} style={{textAlign:i===4?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
@@ -546,7 +555,11 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat
 <div style={{width:`${Math.min(catPct,100)}%`,height:"100%",borderRadius:2,background:catColor,transition:"width .4s"}}/></div>
 <span style={{fontSize:9,color:catColor,fontWeight:600,fontFamily:"'Space Mono',monospace"}}>{fmt(catSpent)}<span style={{color:T.textDim,fontWeight:400}}>/{fmt(catBudget)}</span></span></div>}
 </td>
-<td style={{padding:"10px 14px",fontSize:11,color:T.textMuted}}>{CARD_MAP[t.card]||t.card}</td>
+<td style={{padding:"10px 14px",fontSize:11,color:T.textMuted}}>
+{editCardId===t.id?(
+<select value={t.card} onChange={e=>{setTxns(p=>p.map(x=>x.id===t.id?{...x,card:e.target.value}:x));setEditCardId(null)}} onBlur={()=>setEditCardId(null)} style={{...inpS(T),fontSize:10,padding:"3px 6px",width:"auto"}} autoFocus>
+{Object.entries(CARD_MAP).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
+):(<span onClick={()=>setEditCardId(t.id)} style={{cursor:"pointer",borderBottom:`1px dashed ${T.border}`}} title="Click to change card">{CARD_MAP[t.card]||t.card}</span>)}</td>
 <td style={{padding:"10px 14px",fontSize:13,fontWeight:700,textAlign:"right",fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(t.amt)}</td>
 <td style={{padding:"10px 14px"}}><button onClick={()=>delTxn(t.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}} title="Delete"><Trash2 size={12}/></button></td>
 </tr>)})}</tbody></table></div>
@@ -902,10 +915,10 @@ function PlaceholderPage({title,icon:Icon,T}){return(
 const NAV=[
 {id:"dash",label:"Dashboard",icon:Home,sec:"main"},
 {id:"txn",label:"Transactions",icon:List,sec:"main"},
+{id:"sub",label:"Bills",icon:Repeat,sec:"main"},
 {id:"bud",label:"Budget",icon:Target,sec:"main"},
 {id:"debt",label:"Debt",icon:CreditCard,sec:"money"},
 {id:"sav",label:"Savings",icon:PiggyBank,sec:"money"},
-{id:"sub",label:"Bills",icon:Repeat,sec:"money"},
 {id:"nwt",label:"Net Worth",icon:TrendingUp,sec:"track"},
 {id:"goals",label:"Goals",icon:Rocket,sec:"track"},
 {id:"report",label:"Report",icon:FileBarChart,sec:"track"},
@@ -1143,7 +1156,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 <div style={{padding:mob?14:24,maxWidth:1200}}>{renderPage()}</div></main>
 
 {mob&&<nav style={{position:"fixed",bottom:0,left:0,right:0,height:60,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-around",alignItems:"center",zIndex:50,paddingBottom:"env(safe-area-inset-bottom,0)"}}>
-{[NAV[0],NAV[1],NAV[2],NAV[3],NAV[11]].map(item=>{const act=tab===item.id;return(
+{[NAV[0],NAV[1],NAV[2],NAV[3],NAV[NAV.length-1]].map(item=>{const act=tab===item.id;return(
 <button key={item.id} onClick={()=>setTab(item.id)} style={{background:"none",border:"none",padding:"6px 12px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:act?accent:T.textDim,cursor:"pointer"}}>
 <item.icon size={18}/><span style={{fontSize:9,fontWeight:act?700:500}}>{item.label}</span></button>)})}</nav>}
 
