@@ -409,7 +409,7 @@ const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
 const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResults]=useState(null);const[scanError,setScanError]=useState("");
 const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");const[csvBank,setCsvBank]=useState("chase");const[csvParsed,setCsvParsed]=useState([]);
-const[editCardId,setEditCardId]=useState(null);
+const[editCardId,setEditCardId]=useState(null);const[editCatId,setEditCatId]=useState(null);
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const byCard=useMemo(()=>{const m={};txns.filter(t=>!t.isBill).forEach(t=>{m[t.card]=(m[t.card]||0)+t.amt});return m},[txns]);
 const filtered=useMemo(()=>{let f=[...txns];if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);if(cardF)f=f.filter(t=>t.card===cardF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF,cardF]);
@@ -559,8 +559,13 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat
 <td style={{padding:"10px 14px",fontSize:12,color:T.textDim}}>{t.d}</td>
 <td style={{padding:"10px 14px",fontSize:12,fontWeight:600}}>{t.desc}{t.isBill&&<span style={{...pill(T.purpleBg,T.purple),marginLeft:6,fontSize:8}}>BILL</span>}</td>
 <td style={{padding:"10px 14px"}}>
-<span style={pill((cat?T.infoBg:T.border),cat?T.info:T.textDim)}>{cat?.icon||"📦"} {cat?.name||t.cat}</span>
-{catBudget>0&&!t.isBill&&<div style={{marginTop:4,display:"flex",alignItems:"center",gap:6}}>
+{editCatId===t.id?(
+<select value={t.cat} onChange={e=>{setTxns(p=>p.map(x=>x.id===t.id?{...x,cat:e.target.value}:x));setEditCatId(null)}} onBlur={()=>setEditCatId(null)} style={{...inpS(T),fontSize:10,padding:"3px 6px",width:"auto"}} autoFocus>
+{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select>
+):(
+<span onClick={()=>setEditCatId(t.id)} style={{cursor:"pointer"}} title="Click to change category">
+<span style={pill((cat?T.infoBg:T.border),cat?T.info:T.textDim)}>{cat?.icon||"📦"} {cat?.name||t.cat}</span></span>)}
+{catBudget>0&&!t.isBill&&editCatId!==t.id&&<div style={{marginTop:4,display:"flex",alignItems:"center",gap:6}}>
 <div style={{width:60,height:3,borderRadius:2,background:T.border,overflow:"hidden",flexShrink:0}}>
 <div style={{width:`${Math.min(catPct,100)}%`,height:"100%",borderRadius:2,background:catColor,transition:"width .4s"}}/></div>
 <span style={{fontSize:9,color:catColor,fontWeight:600,fontFamily:"'Space Mono',monospace"}}>{fmt(catSpent)}<span style={{color:T.textDim,fontWeight:400}}>/{fmt(catBudget)}</span></span></div>}
