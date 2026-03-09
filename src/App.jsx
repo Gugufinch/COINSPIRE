@@ -1041,11 +1041,9 @@ return(<div>
 {allItems.length===0?(<div style={{textAlign:"center",padding:30,color:T.textDim}}>
 <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>No splits for {mo}</div>
 <div style={{fontSize:11}}>Add a one-off above or set up bill splits on the Bills page</div></div>
-):(<table style={{width:"100%",borderCollapse:"collapse"}}>
-<thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
-{["","Date","Item","Type","Sarah","Greg","Status",""].map((h,i)=><th key={i} style={{textAlign:i>=4&&i<=5?"right":"left",padding:"8px 8px",fontSize:9,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
-<tbody>{allItems.map((item,i)=>(
-<tr key={item.id||i} style={{borderBottom:`1px solid ${T.border}`,opacity:item.settled?.55:1}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+):(()=>{const unpaidItems=allItems.filter(i=>!i.settled);const settledItems=allItems.filter(i=>i.settled);
+const renderRow=(item,i)=>(
+<tr key={item.id||i} style={{borderBottom:`1px solid ${T.border}`}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
 <td style={{padding:"8px 4px",width:32}}>
 <button onClick={()=>toggleSettled(item)} style={{width:22,height:22,borderRadius:6,border:`2px solid ${item.settled?T.success:T.border}`,background:item.settled?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
 {item.settled&&<Check size={10} color="#080c18"/>}</button></td>
@@ -1055,12 +1053,29 @@ return(<div>
 {item.source==="bill"?"📋 Bill":item.source==="recurring"?"🔄 Monthly":"📌 One-off"}</span></td>
 <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(item.sarahAmt)}</td>
 <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(item.gregAmt)}</td>
-<td style={{padding:"8px 8px",textAlign:"right"}}>
-{item.settled?<div><span style={pill(T.successBg,T.success)}>✓ Settled</span>
-{item.settledDate&&<div style={{fontSize:8,color:T.textDim,marginTop:1}}>{item.settledDate}</div>}</div>
-:<span style={pill(T.warnBg,T.warn)}>Unpaid</span>}</td>
 <td style={{padding:"8px 4px"}}>{item.source!=="bill"&&<button onClick={()=>removeCustom(item.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.3}}><Trash2 size={10}/></button>}</td>
-</tr>))}</tbody></table>)}
+</tr>);
+const headers=["","Date","Item","Type","Sarah","Greg",""].map((h,i)=><th key={i} style={{textAlign:i>=4&&i<=5?"right":"left",padding:"8px 8px",fontSize:9,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>);
+return<>
+{unpaidItems.length>0&&<div style={{marginBottom:14}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={{fontSize:12,fontWeight:700,color:T.warn}}>⚠️ Sarah Owes — {fmt(unsettled)}</div>
+<div style={pill(T.warnBg,T.warn)}>{unpaidItems.length} unpaid</div></div>
+<table style={{width:"100%",borderCollapse:"collapse"}}>
+<thead><tr style={{borderBottom:`2px solid ${T.warn}40`}}>{headers}</tr></thead>
+<tbody>{unpaidItems.map(renderRow)}</tbody></table></div>}
+
+{unpaidItems.length===0&&totalSarah>0&&<div style={{textAlign:"center",padding:16,background:T.successBg,borderRadius:10,marginBottom:14}}>
+<div style={{fontSize:14,fontWeight:700,color:T.success}}>✓ All settled for {mo}!</div></div>}
+
+{settledItems.length>0&&<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={{fontSize:12,fontWeight:700,color:T.success}}>✓ Sarah Paid — {fmt(totalSettled)}</div>
+<div style={pill(T.successBg,T.success)}>{settledItems.length} settled</div></div>
+<table style={{width:"100%",borderCollapse:"collapse",opacity:.7}}>
+<thead><tr style={{borderBottom:`2px solid ${T.success}40`}}>{headers}</tr></thead>
+<tbody>{settledItems.map(renderRow)}</tbody></table></div>}
+</>})()}
 
 <div style={{borderTop:`2px solid ${T.border}`,padding:"12px 8px 0",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
 <div>{unsettled>0?<div style={{fontSize:12,color:T.warn,fontWeight:600}}>Sarah still owes {fmt(unsettled)}</div>
@@ -1159,7 +1174,9 @@ const[addOpen,setAddOpen]=useState(false);const[nf,setNf]=useState({name:"",max:
 const[logId,setLogId]=useState(null);const[logAmt,setLogAmt]=useState("");const[logNote,setLogNote]=useState("");
 
 const addGoal=()=>{if(!nf.name||!nf.max)return;setUserGoals([...gl,{id:"g"+Date.now(),name:nf.name,max:+nf.max,icon:nf.icon}]);setNf({name:"",max:"",icon:"🎯"});setAddOpen(false)};
-const saveGoalEdit=()=>{setUserGoals(gl.map(g=>g.id===editId?{...g,name:ef.name,max:+ef.max,icon:ef.icon}:g));setEditId(null)};
+const saveGoalEdit=()=>{setUserGoals(gl.map(g=>g.id===editId?{...g,name:ef.name,max:+ef.max,icon:ef.icon}:g));
+if(ef.curVal!==undefined&&+ef.curVal!==totalContrib(editId)){const diff=+ef.curVal-totalContrib(editId);if(diff!==0)setGoalContribs(p=>({...p,[editId]:[...(p[editId]||[]),{amt:diff,date:new Date().toISOString().split("T")[0],note:"Balance adjustment"}]}))}
+setEditId(null)};
 const deleteGoal=(id)=>setUserGoals(gl.filter(g=>g.id!==id));
 const addContrib=(gid)=>{if(!logAmt)return;setGoalContribs(p=>({...p,[gid]:[...(p[gid]||[]),{amt:+logAmt,date:now.toISOString().split("T")[0],note:logNote||""}]}));setLogAmt("");setLogNote("");setLogId(null)};
 const removeContrib=(gid,idx)=>{setGoalContribs(p=>({...p,[gid]:(p[gid]||[]).filter((_,i)=>i!==idx)}))};
@@ -1176,7 +1193,7 @@ return(<div>
 <div style={{width:60}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Icon</div>
 <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{icons.slice(0,10).map(ic=><button key={ic} onClick={()=>setNf(p=>({...p,icon:ic}))} style={{fontSize:16,background:nf.icon===ic?T.purpleBg:"transparent",border:`1px solid ${nf.icon===ic?T.purple:T.border}`,borderRadius:6,cursor:"pointer",width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>)}</div></div>
 <div style={{flex:1,minWidth:120}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Goal Name</div><input placeholder="Save for X" value={nf.name} onChange={e=>setNf(p=>({...p,name:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
-<div style={{width:100}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Target $</div><input type="number" placeholder="10000" value={nf.max} onChange={e=>setNf(p=>({...p,max:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:100}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Goal $</div><input type="number" placeholder="10000" value={nf.max} onChange={e=>setNf(p=>({...p,max:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
 <button onClick={addGoal} style={btnS(T,true)}><Check size={12}/></button></div></div>}
 
 {gl.map(g=>{const dg=defaultGoals.find(d=>d.id===g.id);const curVal=dg?dg.cur:totalContrib(g.id);const max=g.max||dg?.max||1;
@@ -1189,16 +1206,18 @@ return(<div key={g.id} style={{...glass(T),marginBottom:12}}>
 :<span style={{fontSize:22}}>{g.icon}</span>}
 <div>{isEditing?(<div style={{display:"flex",gap:6,alignItems:"center"}}>
 <input value={ef.name} onChange={e=>setEf(p=>({...p,name:e.target.value}))} style={{...inpS(T),fontSize:13,fontWeight:700,padding:"4px 8px",width:140}}/>
-<span style={{fontSize:10,color:T.textDim}}>Target: $</span>
-<input type="number" value={ef.max} onChange={e=>setEf(p=>({...p,max:e.target.value}))} style={{...inpS(T),fontSize:13,padding:"4px 8px",width:80}}/></div>
+<span style={{fontSize:10,color:T.textDim}}>Goal: $</span>
+<input type="number" value={ef.max} onChange={e=>setEf(p=>({...p,max:e.target.value}))} style={{...inpS(T),fontSize:13,padding:"4px 8px",width:80}}/>
+{ef.curVal!==undefined&&<><span style={{fontSize:10,color:T.textDim}}>Saved: $</span>
+<input type="number" value={ef.curVal} onChange={e=>setEf(p=>({...p,curVal:e.target.value}))} style={{...inpS(T),fontSize:13,padding:"4px 8px",width:80}}/></>}</div>
 ):(<><div style={{fontSize:14,fontWeight:700}}>{g.name}</div>
 <div style={{fontSize:10,color:T.textDim}}>{fmt(curVal)} of {fmt(max)}{g.id==="europe"?` • ${euroDays} days left`:""}</div></>)}</div></div>
 <div style={{display:"flex",gap:4}}>
 {isEditing?(<><button onClick={saveGoalEdit} style={{...btnS(T,true),fontSize:10,padding:"4px 8px"}}><Check size={10}/>Save</button>
 <button onClick={()=>setEditId(null)} style={{...btnS(T,false),fontSize:10,padding:"4px 8px"}}><X size={10}/></button></>
 ):(<><button onClick={()=>{setLogId(logId===g.id?null:g.id);setLogAmt("");setLogNote("")}} style={btnS(T,true)}><Plus size={10}/>Log</button>
-<button onClick={()=>{setEditId(g.id);setEf({name:g.name,max:g.max||max,icon:g.icon})}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button>
-{!dg&&<button onClick={()=>deleteGoal(g.id)} style={{background:"none",border:"none",color:T.danger,cursor:"pointer",opacity:.4}}><Trash2 size={12}/></button>}</>)}</div></div>
+<button onClick={()=>{setEditId(g.id);setEf({name:g.name,max:g.max||max,icon:g.icon,curVal:dg?undefined:String(totalContrib(g.id))})}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button>
+<button onClick={()=>deleteGoal(g.id)} style={{background:"none",border:"none",color:T.danger,cursor:"pointer",opacity:.4}} title="Delete goal"><Trash2 size={12}/></button></>)}</div></div>
 
 {logId===g.id&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,padding:"8px 10px",background:T.bg,borderRadius:8}}>
 <input type="number" value={logAmt} onChange={e=>setLogAmt(e.target.value)} placeholder="Amount" onKeyDown={e=>e.key==="Enter"&&addContrib(g.id)} style={{...inpS(T),flex:1,fontSize:12}}/>
