@@ -371,7 +371,7 @@ function DashPage({T,accent,data,qa,setQa,addQA}){
 const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc,debts}=data;
 const nwC=nwP!==0?((nw-nwP)/Math.abs(nwP)*100):0;
 const dC=prev.loans>0?((totD-prev.loans)/prev.loans*100):0;
-const totalSav=cur.sav+cur.ira+cur.stk+(cur.jnt/2);
+const totalSav=cur.sav+cur.ira+cur.stk+(cur.jnt);
 const avgBurn=HISTORY.slice(-6).reduce((s,h)=>s+h.spend+h.fix,0)/6;
 return(<div>
 <div style={{...glass(T),marginBottom:14,display:"flex",gap:8,alignItems:"center"}}>
@@ -394,7 +394,7 @@ placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),b
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
 <div style={glass(T)}><div style={lbl(T)}>Net Worth Trend</div>
 <ResponsiveContainer width="100%" height={180}>
-<AreaChart data={HISTORY.map(h=>({name:h.m,nw:(h.sav+h.ira+h.stk+h.jnt/2)-h.loans}))}>
+<AreaChart data={HISTORY.map(h=>({name:h.m,nw:(h.sav+h.ira+h.stk+h.jnt)-h.loans}))}>
 <defs><linearGradient id="nwG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.success} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={0}/></linearGradient></defs>
 <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
 <XAxis dataKey="name" tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
@@ -945,13 +945,20 @@ return(<div>
 <div style={{fontSize:18,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(totalGreg)}</div></div></div></div></div>
 </div>)}
 
-function SavingsPage({T,bal,cur}){
-const assets=[{name:"Savings",val:bal.sav,color:T.success,icon:"💰"},
-{name:"Roth IRA",val:bal.ira,color:T.purple,icon:"📈",target:7000},
-{name:"Stocks",val:bal.stk,color:T.info,icon:"📊"},
-{name:"Joint (50%)",val:bal.jnt/2,color:T.warn,icon:"🤝"}];
+function SavingsPage({T,bal,setBal,cur}){
+const keyMap={sav:"Savings",ira:"Roth IRA",stk:"Stocks",jnt:"Joint"};
+const iconMap={sav:"💰",ira:"📈",stk:"📊",jnt:"🤝"};
+const colorMap={sav:T.success,ira:T.purple,stk:T.info,jnt:T.warn};
+const targets={ira:7000};
+const assets=[{key:"sav",name:"Savings",val:bal.sav,color:T.success,icon:"💰"},
+{key:"ira",name:"Roth IRA",val:bal.ira,color:T.purple,icon:"📈",target:7000},
+{key:"stk",name:"Stocks",val:bal.stk,color:T.info,icon:"📊"},
+{key:"jnt",name:"Joint",val:bal.jnt,color:T.warn,icon:"🤝"}];
 const total=assets.reduce((s,a)=>s+a.val,0);
-const savHist=HISTORY.map(h=>({name:h.m,sav:h.sav,ira:h.ira,stk:h.stk,jnt:h.jnt/2}));
+const savHist=HISTORY.map(h=>({name:h.m,sav:h.sav,ira:h.ira,stk:h.stk,jnt:h.jnt}));
+const[addTo,setAddTo]=useState(null);const[addAmt,setAddAmt]=useState("");
+const doAdd=()=>{if(!addTo||!addAmt)return;setBal(p=>({...p,[addTo]:p[addTo]+(+addAmt)}));setAddAmt("");setAddTo(null)};
+const doSet=(key,val)=>setBal(p=>({...p,[key]:+val}));
 return(<div>
 <StatCard title="Total Assets" value={fmt(total)} icon={PiggyBank} color={T.success} T={T}/>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12,marginTop:14}}>
@@ -964,7 +971,15 @@ return(<div>
 {a.target&&<div><div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.textDim,marginBottom:3}}>
 <span>Annual Target</span><span>{(a.val/a.target*100).toFixed(0)}%</span></div>
 <PBar pct={a.val/a.target*100} color={a.color} height={4} bg={T.border}/></div>}
-<div style={{fontSize:10,color:T.textDim,marginTop:6}}>{total>0?(a.val/total*100).toFixed(1):0}% of portfolio</div></div>))}</div>
+<div style={{fontSize:10,color:T.textDim,marginTop:6}}>{total>0?(a.val/total*100).toFixed(1):0}% of portfolio</div>
+<div style={{display:"flex",gap:4,marginTop:8}}>
+{addTo===a.key?(<>
+<input type="number" value={addAmt} onChange={e=>setAddAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")doAdd();if(e.key==="Escape")setAddTo(null)}} placeholder="+/- amount" style={{...inpS(T),flex:1,fontSize:11,padding:"4px 8px"}} autoFocus/>
+<button onClick={doAdd} style={{...btnS(T,true),fontSize:10,padding:"4px 8px"}}><Check size={10}/></button>
+<button onClick={()=>setAddTo(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={12}/></button>
+</>):(<>
+<button onClick={()=>setAddTo(a.key)} style={{...btnS(T,true),fontSize:10,padding:"4px 10px",flex:1,justifyContent:"center"}}><Plus size={10}/>Add/Adjust</button>
+</>)}</div></div>))}</div>
 <div style={{...glass(T),marginTop:14}}><div style={lbl(T)}>Asset Growth</div>
 <ResponsiveContainer width="100%" height={200}>
 <AreaChart data={savHist}>
@@ -979,7 +994,7 @@ return(<div>
 </AreaChart></ResponsiveContainer></div></div>)}
 
 function NWPage({T,bal,cur}){
-const nwData=HISTORY.map(h=>{const nw=(h.sav+h.ira+h.stk+h.jnt/2)-h.loans;return{name:h.m,nw,assets:h.sav+h.ira+h.stk+h.jnt/2,debt:h.loans}});
+const nwData=HISTORY.map(h=>{const nw=(h.sav+h.ira+h.stk+h.jnt)-h.loans;return{name:h.m,nw,assets:h.sav+h.ira+h.stk+h.jnt,debt:h.loans}});
 const curNW=nwData[nwData.length-1]?.nw||0;const firstNW=nwData[0]?.nw||0;
 const totalGain=curNW-firstNW;const avgGain=totalGain/Math.max(1,nwData.length);
 const peak=Math.max(...nwData.map(d=>d.nw));
@@ -1009,7 +1024,7 @@ const euroT=8000;const euroS=2400;const euroDate=new Date(2026,7,1);const now=ne
 const euroDays=Math.max(0,Math.ceil((euroDate-now)/86400000));
 const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:31241,icon:"🏆",inv:true},
 {id:"europe",name:"Europe Trip",cur:euroS,max:euroT,icon:"✈️"},{id:"ira",name:"IRA Max",cur:cur.ira,max:7000,icon:"📈"},
-{id:"emerg",name:"Emergency Fund",cur:cur.sav+(cur.jnt/2),max:10000,icon:"🛡️"}];
+{id:"emerg",name:"Emergency Fund",cur:cur.sav+(cur.jnt),max:10000,icon:"🛡️"}];
 const gl=userGoals||defaultGoals.map(g=>({id:g.id,name:g.name,max:g.max,icon:g.icon}));
 const totalContrib=gid=>(goalContribs[gid]||[]).reduce((s,c)=>s+c.amt,0);
 const addContrib=(gid,amt,note)=>{setGoalContribs(p=>({...p,[gid]:[...(p[gid]||[]),{amt:+amt,date:now.toISOString().split("T")[0],note:note||""}]}))};
@@ -1265,8 +1280,8 @@ else if(Math.random()<0.08)showToast(["💰","🪙","📊","✨","🎯"][Math.fl
 const totD=debts.reduce((s,d)=>s+(d.bal||0),0);const spendTxns=txns.filter(t=>!t.isBill);const totS=spendTxns.reduce((s,t)=>s+t.amt,0);const totB=cats.reduce((s,c)=>s+c.budget,0);const billTxns=txns.filter(t=>t.isBill);const totBills=billTxns.reduce((s,t)=>s+t.amt,0);
 const cur={...HISTORY[HISTORY.length-1],sav:bal.sav,ira:bal.ira,stk:bal.stk,jnt:bal.jnt,inc:bal.inc,fix:bal.fix,loans:totD};
 const prev=HISTORY[HISTORY.length-2];
-const nw=(cur.sav+cur.ira+cur.stk+cur.jnt/2)-cur.loans;
-const nwP=(prev.sav+prev.ira+prev.stk+prev.jnt/2)-prev.loans;
+const nw=(cur.sav+cur.ira+cur.stk+cur.jnt)-cur.loans;
+const nwP=(prev.sav+prev.ira+prev.stk+prev.jnt)-prev.loans;
 const savR=cur.inc>0?((cur.inc-cur.fix-totS)/cur.inc*100):0;
 const dim=dimOf(mo);const effectiveDay=mo===curMK?day:dim;
 const stepMo=(dir)=>{const p=mo.split("'");let mi=MO.indexOf(p[0]);let yr=parseInt(p[1]);
@@ -1307,7 +1322,7 @@ case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,tot
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
-case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
+case"sav":return<SavingsPage T={T} bal={bal} setBal={setBal} cur={cur}/>;
 case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal} varCap={varCap} setVarCap={setVarCap}/>;
 case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} customSplits={customSplits} setCustomSplits={setCustomSplits} recurringSplits={recurringSplits} setRecurringSplits={setRecurringSplits} mo={mo} billsPaid={billsPaid}/>;
 case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
