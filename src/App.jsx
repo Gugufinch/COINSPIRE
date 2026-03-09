@@ -685,7 +685,8 @@ const dueStatus=(d)=>{if(!d||d===0)return{c:T.textDim,l:"flex"};if(paidSet.has(d
 const renderRow=(b,i,arr)=>{const paid=paidSet.has(b.id);const isEdit=editId===b.id;const sp=moSplits[b.id];
 const actual=moActuals[b.id];const isVar=b.kind==="variable";const variance=isVar&&actual!=null?(actual-b.amt):null;
 const pastDue=b.due&&b.due>0&&today>b.due&&!paid;
-return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",opacity:paid?.5:1,background:pastDue&&!paid?T.dangerBg:"transparent",borderRadius:pastDue?6:0,padding:pastDue?"10px 8px":"10px 0"}}>
+return(<div key={b.id} style={{padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",opacity:paid?.5:1,background:pastDue&&!paid?T.dangerBg:"transparent",borderRadius:pastDue?6:0}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
 <button onClick={()=>paid?unpay(b.id):payBill(b)} style={{width:24,height:24,borderRadius:6,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
 {paid&&<Check size={11} color="#080c18"/>}</button>
 <div style={{width:40,textAlign:"center",flexShrink:0}}>
@@ -854,7 +855,7 @@ const splitBills=allBills.filter(b=>moSplits[b.id]&&moSplits[b.id].confirmed);
 const moCustom=customSplits[mo]||[];
 
 // Recurring splits auto-seed into this month
-const moRecurring=recurringSplits.map((r,i)=>{const existing=moCustom.find(c=>c.recurId===r.id);return existing||{id:`rec_${r.id}_${mo}`,recurId:r.id,desc:r.desc,amt:r.amt,sarahAmt:r.amt*(r.pct/100),gregAmt:r.amt*(1-r.pct/100),pct:r.pct,date:null,settled:false,type:"recurring"}}).filter(r=>!moCustom.find(c=>c.recurId===r.recurId));
+const moRecurring=recurringSplits.map((r,i)=>{const existing=moCustom.find(c=>c.recurId===r.id);return existing||{id:`rec_${r.id}_${mo}`,recurId:r.id,desc:r.desc,amt:r.amt,sarahAmt:r.amt*((r.pct||50)/100),gregAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}}).filter(r=>!moCustom.find(c=>c.recurId===r.recurId));
 const allCustom=[...moCustom,...moRecurring];
 
 // Totals across all sources
@@ -1041,7 +1042,7 @@ return(<div>
 function GoalsPage({T,userGoals,setUserGoals,goalContribs,setGoalContribs,cur,totalDebt}){
 const euroT=8000;const euroS=2400;const euroDate=new Date(2026,7,1);const now=new Date();
 const euroDays=Math.max(0,Math.ceil((euroDate-now)/86400000));
-const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:31241,icon:"🏆",inv:true},
+const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:HISTORY[0].loans||31241,icon:"🏆",inv:true},
 {id:"europe",name:"Europe Trip",cur:euroS,max:euroT,icon:"✈️"},{id:"ira",name:"IRA Max",cur:cur.ira,max:7000,icon:"📈"},
 {id:"emerg",name:"Emergency Fund",cur:cur.sav+(cur.jnt),max:10000,icon:"🛡️"}];
 const gl=userGoals||defaultGoals.map(g=>({id:g.id,name:g.name,max:g.max,icon:g.icon}));
@@ -1313,7 +1314,7 @@ const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]
 const insights=useMemo(()=>{
 const bp=txns.filter(t=>!t.isBill).reduce((mx,t)=>t.amt>mx.amt?t:mx,{amt:0,desc:"-"});const pt=(totS/Math.max(effectiveDay,1))*dim;
 const ed=Math.max(0,Math.ceil((new Date(2026,7,1)-now)/86400000));
-const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${((31241-totD)/31241*100).toFixed(0)}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,`${ed} days to Europe`,`Projected: ${fmt(pt)}`],
+const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${(((HISTORY[0].loans||31241)-totD)/(HISTORY[0].loans||31241)*100).toFixed(0)}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,`${ed} days to Europe`,`Projected: ${fmt(pt)}`],
 unhinged:[savR>20?`${savR.toFixed(1)}% savings?? Who ARE you`:`${savR.toFixed(1)}% savings. Money fleeing`,`${fmt(bp.amt)} at ${bp.desc}. In THIS economy??`,totS>totB?`Budget obliterated. ${fmt(totS-totB)} over`:`${fmt(totB-totS)} under budget. UNWELL`,`${ed} days till Europe. Wallet needs therapy`,pt>cur.inc?`Spending ${fmt(pt)}. Bank writing its will`:`Projected ${fmt(pt)} — wallet survives`],
 dark:[`${savR.toFixed(1)}% savings. Finances outlive you`,totD>0?`${fmt(totD)} debt. Collecting interest like Pokémon`:`Debt free. Die with dignity`,`${fmt(bp.amt)} at ${bp.desc}. Temporary happiness`,`${ed} days to Europe. Running with passport`,totS>totB?`${fmt(totS-totB)} over budget. Plan DOA`:`Under budget by ${fmt(totB-totS)}. Nothing reliable`],
 therapist:[savR>15?`${savR.toFixed(1)}% saved. Proud?`:`${savR.toFixed(1)}% savings. How does that FEEL?`,`${fmt(bp.amt)} at ${bp.desc}. Need or void?`,totS>totB?`Over ${fmt(totS-totB)}. Coping mechanisms?`:`Under budget. Growth. Gold star`,`${ed} days to Europe. Running... with passport`,totD>0?`${fmt(totD)} debt. IS about money`:`Debt free! Inner child healing`],
