@@ -591,32 +591,67 @@ return(<div>
 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
 {paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name}</div>)}</div></div>}</div>)}
 
-function SubsPage({T,subs,setSubs}){
-const active=subs.filter(s=>s.st==="active");const flagged=subs.filter(s=>s.st==="flagged");
-const total=active.reduce((s,x)=>s+x.a,0);
-const byCat={};active.forEach(s=>{byCat[s.cat]=(byCat[s.cat]||0)+s.a});
-const pieData=Object.entries(byCat).map(([k,v])=>({name:k,value:Math.round(v*100)/100}));
+function BillsPage({T,recurring,setRecurring,subs,billsPaid,setBillsPaid,mo,addTxnsSmart}){
+const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,desc:r.desc,amt:r.amt,cat:r.cat,type:"bill",src:"recurring"})),
+...subs.filter(s=>s.st==="active").map((s,i)=>({id:`s_${i}`,desc:s.n,amt:s.a,cat:s.cat,type:"sub",src:"subscription",card:s.card}))];
+const paidSet=new Set(billsPaid[mo]||[]);
+const paidCount=allBills.filter(b=>paidSet.has(b.id)).length;
+const totalAmt=allBills.reduce((s,b)=>s+b.amt,0);
+const paidAmt=allBills.filter(b=>paidSet.has(b.id)).reduce((s,b)=>s+b.amt,0);
+const remainAmt=totalAmt-paidAmt;
+const pctDone=allBills.length>0?(paidCount/allBills.length*100):0;
+const[showAdd,setShowAdd]=useState(false);const[newBill,setNewBill]=useState({desc:"",amt:"",cat:"misc"});
+
+const togglePaid=(bill)=>{const cur=new Set(billsPaid[mo]||[]);
+if(cur.has(bill.id)){cur.delete(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}))}
+else{cur.add(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}));
+addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc,amt:bill.amt,cat:bill.cat||"misc",card:"debit"}])}};
+
+const addBill=()=>{if(!newBill.desc||!newBill.amt)return;setRecurring(p=>[...p,{desc:newBill.desc,amt:+newBill.amt,cat:newBill.cat}]);setNewBill({desc:"",amt:"",cat:"misc"});setShowAdd(false)};
+const removeBill=(idx)=>setRecurring(p=>p.filter((_,i)=>i!==idx));
+
 return(<div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:14}}>
-<StatCard title="Monthly Subs" value={fmt(total)} icon={Repeat} color={T.info} T={T}/>
-<StatCard title="Annual Cost" value={fmt(total*12)} icon={Calendar} color={T.warn} T={T}/>
-<StatCard title="Active" value={active.length.toString()} icon={Activity} color={T.success} T={T}/></div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:14}}>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14}}>
+<div style={{...glass(T),textAlign:"center"}}>
+<div style={{position:"relative",width:70,height:70,margin:"0 auto 8px"}}>
+<svg width={70} height={70} style={{transform:"rotate(-90deg)"}}><circle cx={35} cy={35} r={30} fill="none" stroke={T.border} strokeWidth={5}/>
+<circle cx={35} cy={35} r={30} fill="none" stroke={T.success} strokeWidth={5} strokeDasharray={2*Math.PI*30} strokeDashoffset={2*Math.PI*30*(1-pctDone/100)} strokeLinecap="round" style={{transition:"stroke-dashoffset .8s"}}/></svg>
+<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{pctDone.toFixed(0)}%</div></div>
+<div style={{fontSize:10,color:T.textDim}}>{paidCount} of {allBills.length} paid</div></div>
+<StatCard title="Total Due" value={fmt(totalAmt)} icon={Repeat} color={T.info} T={T}/>
+<StatCard title="Paid" value={fmt(paidAmt)} icon={Check} color={T.success} T={T}/>
+<StatCard title="Remaining" value={fmt(remainAmt)} icon={Clock} color={remainAmt>0?T.warn:T.success} T={T}/></div>
+
 <div style={glass(T)}>
-{subs.map((s,i)=>(
-<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:i<subs.length-1?`1px solid ${T.border}`:"none",opacity:s.st==="flagged"?.6:1}}>
-<div style={{flex:1}}><div style={{fontSize:13,fontWeight:600}}>{s.n}</div>
-<div style={{fontSize:10,color:T.textDim}}>{s.card} • {s.cat}</div></div>
-<div style={{fontSize:14,fontWeight:700,fontFamily:"'Space Mono',monospace",color:s.st==="flagged"?T.warn:T.text}}>{fmt(s.a)}</div>
-<div style={pill(s.st==="active"?T.successBg:s.st==="flagged"?T.warnBg:T.dangerBg,s.st==="active"?T.success:s.st==="flagged"?T.warn:T.danger)}>{s.st}</div></div>))}</div>
-<div style={glass(T)}><div style={lbl(T)}>By Category</div>
-<ResponsiveContainer width="100%" height={200}>
-<PieChart><Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-{pieData.map((_,i)=><Cell key={i} fill={CHART_COLORS[i%CHART_COLORS.length]}/>)}</Pie>
-<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,color:T.text}} formatter={v=>[fmt(v)]}/></PieChart></ResponsiveContainer>
-<div style={{display:"flex",flexWrap:"wrap",gap:8,justifyContent:"center",marginTop:8}}>
-{pieData.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:T.textMuted}}>
-<div style={{width:8,height:8,borderRadius:2,background:CHART_COLORS[i%CHART_COLORS.length]}}/>{p.name}: {fmt(p.value)}</div>)}</div></div></div></div>)}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+<div style={lbl(T)}>Monthly Bills & Subscriptions — {mo}</div>
+<button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={11}/>Add Bill</button></div>
+
+{showAdd&&<div style={{display:"flex",gap:8,marginBottom:14,padding:12,background:T.bg,borderRadius:10}}>
+<input placeholder="Bill name" value={newBill.desc} onChange={e=>setNewBill(p=>({...p,desc:e.target.value}))} style={{...inpS(T),flex:1,fontSize:11}}/>
+<input type="number" placeholder="$" value={newBill.amt} onChange={e=>setNewBill(p=>({...p,amt:e.target.value}))} style={{...inpS(T),width:80,fontSize:11}}/>
+<button onClick={addBill} style={btnS(T,true)}><Check size={12}/></button></div>}
+
+{allBills.map((b,i)=>{const paid=paidSet.has(b.id);
+return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:i<allBills.length-1?`1px solid ${T.border}`:"none",opacity:paid?.65:1,transition:"all .2s"}}>
+<button onClick={()=>togglePaid(b)} style={{width:28,height:28,borderRadius:8,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s",flexShrink:0}}>
+{paid&&<Check size={14} color="#080c18"/>}</button>
+<div style={{flex:1}}>
+<div style={{fontSize:13,fontWeight:600,textDecoration:paid?"line-through":"none",color:paid?T.textDim:T.text}}>{b.desc}</div>
+<div style={{display:"flex",gap:6,marginTop:2}}>
+<span style={pill(b.type==="bill"?T.infoBg:T.purpleBg,b.type==="bill"?T.info:T.purple)}>{b.type==="bill"?"📋 Bill":"🔄 Sub"}</span>
+{b.card&&<span style={{fontSize:9,color:T.textDim}}>{b.card}</span>}
+</div></div>
+<div style={{fontSize:15,fontWeight:700,fontFamily:"'Space Mono',monospace",color:paid?T.success:T.text}}>{fmt(b.amt)}</div>
+<div style={pill(paid?T.successBg:T.warnBg,paid?T.success:T.warn)}>{paid?"Paid":"Due"}</div>
+{b.src==="recurring"&&<button onClick={()=>removeBill(recurring.findIndex(r=>r.desc===b.desc))} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Trash2 size={11}/></button>}
+</div>)})}
+</div>
+
+<div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
+<span>✓ Marking "Paid" auto-logs as transaction</span>
+<span>Annual: <strong style={{color:T.warn}}>{fmt(totalAmt*12)}</strong>/yr</span></div>
+</div>)}
 
 function SavingsPage({T,bal,cur}){
 const assets=[{name:"Savings",val:bal.sav,color:T.success,icon:"💰"},
@@ -801,7 +836,7 @@ const NAV=[
 {id:"bud",label:"Budget",icon:Target,sec:"main"},
 {id:"debt",label:"Debt",icon:CreditCard,sec:"money"},
 {id:"sav",label:"Savings",icon:PiggyBank,sec:"money"},
-{id:"sub",label:"Subscriptions",icon:Repeat,sec:"money"},
+{id:"sub",label:"Bills",icon:Repeat,sec:"money"},
 {id:"nwt",label:"Net Worth",icon:TrendingUp,sec:"track"},
 {id:"goals",label:"Goals",icon:Rocket,sec:"track"},
 {id:"report",label:"Report",icon:FileBarChart,sec:"track"},
@@ -871,6 +906,7 @@ throw new Error("Unknown provider: "+p)};
 const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());
 const[keySaved,setKeySaved]=useState(false);
 const[recurring,setRecurring]=useState([{desc:"Rent",amt:1200,cat:"misc"},{desc:"BCU Loan",amt:345,cat:"loan"},{desc:"UFC Fit",amt:120,cat:"rec"},{desc:"Mint Mobile",amt:30,cat:"misc"},{desc:"Internet",amt:22.50,cat:"misc"},{desc:"Cloud Storage",amt:12.99,cat:"misc"},{desc:"Insurance",amt:10,cat:"misc"},{desc:"Spotify",amt:9.26,cat:"misc"},{desc:"Prime",amt:8,cat:"misc"},{desc:"Photoshop",amt:7.50,cat:"misc"},{desc:"Netflix",amt:4,cat:"misc"}]);
+const[billsPaid,setBillsPaid]=useState({});
 const[qa,setQa]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
@@ -879,8 +915,8 @@ useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("r
 const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 
 // Load/Save
-useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring)}setLoaded(true)})()},[activeUser]);
-useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring]);
+useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid)}setLoaded(true)})()},[activeUser]);
+useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid]);
 
 const txns=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
@@ -952,7 +988,7 @@ case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTx
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
-case"sub":return<SubsPage T={T} subs={subs} setSubs={setSubs}/>;
+case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} mo={mo} addTxnsSmart={addTxnsSmart}/>;
 case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
 case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
 case"report":return<ReportPage T={T} cats={cats} byCat={byCat} totS={totS} totB={totB} savR={savR}/>;
@@ -991,18 +1027,9 @@ case"settings":return(
 <input value={userEmojis[activeUser]||""} onChange={e=>{const v=e.target.value;const emoji=[...v].slice(-1).join("")||"😀";setUserEmojis(p=>({...p,[activeUser]:emoji}))}} style={{...inpS(T),width:80,fontSize:24,textAlign:"center"}} maxLength={4}/>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{["🎸","🌸","🎧","💰","🔥","🎯","🚀","⚡","🎨","👑","🦊","🐻","🎵","🌊","🍕","🏀","🎮","🧠","💎","🌙","☀️","🦋","🐉","🍀","🎲","🏆","🎤","🦈","🐺","🌺","💜","🖤","🤖","👽","🦁","🐱","🐶","🦄","🍷","☕","🏔️","🌈","💫","🔮","✨","🎪","🛹","🎹"].map(e=>
 <button key={e} onClick={()=>setUserEmojis(p=>({...p,[activeUser]:e}))} style={{fontSize:18,background:userEmojis[activeUser]===e?T.successBg:"transparent",border:`1px solid ${userEmojis[activeUser]===e?T.success:T.border}`,borderRadius:8,padding:"4px 6px",cursor:"pointer"}}>{e}</button>)}</div></div></div>
-<div style={{marginBottom:20}}><div style={lbl(T)}>Recurring Bills</div>
-<div style={{maxHeight:250,overflow:"auto"}}>
-{recurring.map((r,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
-<input value={r.desc} onChange={e=>{const nr=[...recurring];nr[i]={...nr[i],desc:e.target.value};setRecurring(nr)}} style={{...inpS(T),flex:1,fontSize:11,padding:"5px 8px"}}/>
-<input type="number" value={r.amt} onChange={e=>{const nr=[...recurring];nr[i]={...nr[i],amt:+e.target.value};setRecurring(nr)}} style={{...inpS(T),width:70,fontSize:11,padding:"5px 8px"}}/>
-<select value={r.cat} onChange={e=>{const nr=[...recurring];nr[i]={...nr[i],cat:e.target.value};setRecurring(nr)}} style={{...inpS(T),width:"auto",fontSize:10,padding:"5px 6px"}}>
-{cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}</select>
-<button onClick={()=>setRecurring(recurring.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.danger,cursor:"pointer"}}><Trash2 size={12}/></button></div>)}</div>
-<div style={{display:"flex",gap:6,marginTop:8}}>
-<button onClick={()=>setRecurring([...recurring,{desc:"New Bill",amt:0,cat:"misc"}])} style={btnS(T,false)}><Plus size={11}/>Add Bill</button>
-<button onClick={()=>{const d=new Date().toISOString().split("T")[0];addTxnsSmart(recurring.map((b,i)=>({id:Date.now()+i,d,desc:b.desc,amt:b.amt,cat:b.cat,card:"debit"})))}} style={btnS(T,true)}><Zap size={11}/>Log All ({fmt(recurring.reduce((s,r)=>s+r.amt,0))})</button></div>
-<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Edit bills above. "Log All" adds them as transactions for this month.</div></div>
+<div style={{marginBottom:20}}><div style={lbl(T)}>Bills & Subscriptions</div>
+<div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>{recurring.length} bills + {subs.filter(s=>s.st==="active").length} subscriptions = {fmt(recurring.reduce((s,r)=>s+r.amt,0)+subs.filter(s=>s.st==="active").reduce((s,x)=>s+x.a,0))}/mo</div>
+<button onClick={()=>setTab("sub")} style={btnS(T,false)}>📋 Manage on Bills page</button></div>
 <div><div style={lbl(T)}>Account</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
 <span style={{fontSize:24}}>{userEmojis[activeUser]||USERS.find(u=>u.id===activeUser)?.icon}</span>
