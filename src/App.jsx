@@ -582,80 +582,57 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat
 <div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
 <span>{filtered.length} transactions</span><span>Spending: <strong style={{color:T.danger}}>{fmt(filtered.filter(t=>!t.isBill).reduce((s,t)=>s+t.amt,0))}</strong>{filtered.some(t=>t.isBill)&&<span style={{color:T.textDim}}> + Bills: <strong style={{color:T.purple}}>{fmt(filtered.filter(t=>t.isBill).reduce((s,t)=>s+t.amt,0))}</strong></span>}</span></div></div>)}
 
-function BudgetPage({T,cats,setCats,byCat,totS,totB}){
+function BudgetPage({T,cats,setCats,byCat,totS,totB,bal,varCap,fixedBillTotal}){
 const[editId,setEditId]=useState(null);const[editVal,setEditVal]=useState("");
+const incomeAfterBills=bal.inc-bal.fix-varCap;
+const remaining=totB-totS;
+const spent=totS;const pctUsed=totB>0?(spent/totB*100):0;
 return(<div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
-<StatCard title="Total Budget" value={fmt(totB)} icon={Target} color={T.info} T={T}/>
-<StatCard title="Total Spent" value={fmt(totS)} icon={DollarSign} color={totS>totB?T.danger:T.success} T={T}/>
-<StatCard title="Remaining" value={fmt(totB-totS)} icon={PiggyBank} color={totB-totS>0?T.success:T.danger} T={T}/></div>
+<div style={{...glass(T),marginBottom:14}}>
+<div style={lbl(T)}>Income Waterfall</div>
+<div style={{display:"flex",gap:4,alignItems:"center",marginBottom:10}}>
+{[{l:"Income",v:bal.inc,c:T.success},{l:"Fixed Bills",v:bal.fix,c:T.info},{l:"Variable Cap",v:varCap,c:T.warn},{l:"Spending Budget",v:incomeAfterBills,c:T.purple}].map((s,i)=>(
+<div key={i} style={{flex:s.v/bal.inc,background:s.c+"20",borderRadius:6,padding:"8px 6px",textAlign:"center",minWidth:40,border:`1px solid ${s.c}30`}}>
+<div style={{fontSize:8,color:s.c,fontWeight:700,textTransform:"uppercase",letterSpacing:.5}}>{s.l}</div>
+<div style={{fontSize:12,fontWeight:800,fontFamily:"'Space Mono',monospace",color:s.c}}>{fmt(s.v)}</div></div>))}</div>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.textDim}}>
+<span>After bills: <strong style={{color:T.text}}>{fmt(incomeAfterBills)}</strong> available for categories below</span>
+<span>Spent: <strong style={{color:pctUsed>100?T.danger:T.success}}>{fmt(spent)}</strong> of {fmt(totB)} ({pctUsed.toFixed(0)}%)</span></div></div>
+
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
+<StatCard title="Category Budget" value={fmt(totB)} icon={Target} color={T.info} T={T}/>
+<StatCard title="Spent" value={fmt(totS)} icon={DollarSign} color={totS>totB?T.danger:T.success} T={T}/>
+<StatCard title="Remaining" value={fmt(remaining)} icon={PiggyBank} color={remaining>0?T.success:T.danger} T={T}/></div>
+
 <div style={glass(T)}>
-{cats.map((c,i)=>{const spent=byCat[c.id]||0;const pct=c.budget>0?(spent/c.budget*100):0;const over=spent>c.budget;
+<div style={lbl(T)}>Category Budgets</div>
+{cats.map((c,i)=>{const spent=byCat[c.id]||0;const pct=c.budget>0?(spent/c.budget*100):0;const over=spent>c.budget;const left=c.budget-spent;
 return(<div key={c.id} style={{padding:"14px 0",borderBottom:i<cats.length-1?`1px solid ${T.border}`:"none"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
 <span style={{fontSize:18}}>{c.icon}</span>
 <div><div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
-<div style={{fontSize:10,color:T.textDim}}>{fmt(spent)} of {fmt(c.budget)}</div></div></div>
-<div style={{display:"flex",alignItems:"center",gap:6}}>
+<div style={{fontSize:10,color:T.textDim}}>{fmt(spent)} spent</div></div></div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
 {editId===c.id?(
 <div style={{display:"flex",gap:4,alignItems:"center"}}>
 <span style={{fontSize:10,color:T.textDim}}>$</span>
 <input type="number" value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){setCats(p=>p.map(x=>x.id===c.id?{...x,budget:+editVal}:x));setEditId(null)}if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:70,fontSize:12,padding:"4px 8px"}} autoFocus/>
-<button onClick={()=>{setCats(p=>p.map(x=>x.id===c.id?{...x,budget:+editVal}:x));setEditId(null)}} style={{background:"none",border:"none",color:T.success,cursor:"pointer"}}><Check size={14}/></button>
-<button onClick={()=>setEditId(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={14}/></button></div>
+<button onClick={()=>{setCats(p=>p.map(x=>x.id===c.id?{...x,budget:+editVal}:x));setEditId(null)}} style={{background:"none",border:"none",color:T.success,cursor:"pointer"}}><Check size={14}/></button></div>
 ):(
 <div style={{display:"flex",alignItems:"center",gap:6}}>
-<div style={{textAlign:"right"}}>
-<div style={{fontSize:14,fontWeight:700,fontFamily:"'Space Mono',monospace",color:over?T.danger:T.success}}>{fmt(c.budget-spent)}</div>
-<div style={{fontSize:9,color:over?T.danger:T.textDim}}>{over?"OVER":"left"}</div></div>
-<button onClick={()=>{setEditId(c.id);setEditVal(String(c.budget))}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}}><Edit3 size={12}/></button></div>
+<div style={{textAlign:"right",minWidth:80}}>
+<div style={{fontSize:16,fontWeight:800,fontFamily:"'Space Mono',monospace",color:over?T.danger:T.success}}>{fmt(left)}</div>
+<div style={{fontSize:9,color:over?T.danger:T.textDim}}>{over?`${fmt(Math.abs(left))} OVER`:`of ${fmt(c.budget)}`}</div></div>
+<button onClick={()=>{setEditId(c.id);setEditVal(String(c.budget))}} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><Edit3 size={12}/></button></div>
 )}</div></div>
-<PBar pct={pct} color={pct>100?T.danger:pct>80?T.warn:T.success} height={5} bg={T.border}/>
+<PBar pct={pct} color={pct>100?T.danger:pct>80?T.warn:T.success} height={6} bg={T.border}/>
 </div>)})}</div></div>)}
-
-function DebtPage({T,debts,setDebts}){
-const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal===0&&d.status==="paid");
-const totalDebt=active.reduce((s,d)=>s+(d.bal||0),0);
-const payoffs=active.filter(d=>d.minPay>0).map(d=>{const pay=d.minPay;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
-while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:Math.max(0,rem)});rem-=pay;m++;dt.setMonth(dt.getMonth()+1)}
-if(rem<=0)pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:0});
-return{...d,pts,freeDate:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,months:m}});
-return(<div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:14}}>
-<StatCard title="Total Debt" value={fmt(totalDebt)} icon={CreditCard} color={T.warn} T={T}/>
-<StatCard title="Debts Paid" value={`${paid.length}/${debts.length}`} icon={Check} color={T.success} T={T}/>
-<StatCard title="Monthly Payments" value={fmt(active.reduce((s,d)=>s+(d.minPay||0),0))} icon={Calendar} color={T.info} T={T}/></div>
-
-{payoffs.map(d=>(
-<div key={d.id} style={{...glass(T),marginBottom:12}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-<div><div style={{fontSize:15,fontWeight:700}}>{d.name}</div>
-<div style={{fontSize:11,color:T.textDim}}>{d.rate}% APR • {fmt(d.minPay)}/mo • {d.note||""}</div></div>
-<div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</div>
-<div style={pill(T.infoBg,T.info)}>Free by {d.freeDate}</div></div></div>
-<ResponsiveContainer width="100%" height={120}>
-<AreaChart data={d.pts}><defs><linearGradient id={`dg${d.id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient></defs>
-<CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
-<XAxis dataKey="mo" tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} interval={Math.floor(d.pts.length/5)}/>
-<YAxis tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(1)}k`}/>
-<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v),"Balance"]}/>
-<Area type="monotone" dataKey="rem" stroke={T.warn} strokeWidth={2} fill={`url(#dg${d.id})`}/></AreaChart></ResponsiveContainer></div>))}
-
-{paid.length>0&&<div style={glass(T)}>
-<div style={lbl(T)}>Eliminated 💀</div>
-<div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-{paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name}</div>)}</div></div>}
-{active.filter(d=>!d.minPay||d.minPay===0).length>0&&<div style={glass(T)}>
-<div style={lbl(T)}>On Hold ⏸️</div>
-{active.filter(d=>!d.minPay||d.minPay===0).map(d=><div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
-<div><span style={{fontWeight:600}}>{d.name}</span><span style={{fontSize:10,color:T.textDim,marginLeft:8}}>{d.note||"No payments"}</span></div>
-<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</span></div>)}</div>}</div>)}
 
 function BillsPage({T,recurring,setRecurring,subs,setSubs,billsPaid,setBillsPaid,billActuals,setBillActuals,splits,setSplits,mo,addTxnsSmart,bal,varCap,setVarCap}){
 const fixed=recurring.filter(r=>r.kind!=="variable");const variable=recurring.filter(r=>r.kind==="variable");
 const activeSubs=subs.filter(s=>s.st==="active");
-const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,idx:i,...r})),...activeSubs.map((s,i)=>({id:`s_${i}`,idx:i,desc:s.n,amt:s.a,cat:s.cat,type:"sub",kind:"fixed",group:"Subscriptions",src:"subscription",origIdx:subs.indexOf(s)}))];
+const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,idx:i,...r})),...activeSubs.map((s,i)=>({id:`s_${i}`,idx:i,desc:s.n,amt:s.a,cat:s.cat,type:"sub",kind:"fixed",group:"Subscriptions",src:"subscription",origIdx:subs.indexOf(s),due:s.due||0}))];
 const paidSet=new Set(billsPaid[mo]||[]);const moSplits=splits[mo]||{};const moActuals=billActuals[mo]||{};
 const fixedBills=allBills.filter(b=>b.kind!=="variable");const varBills=allBills.filter(b=>b.kind==="variable");
 const fixedTotal=fixedBills.reduce((s,b)=>s+b.amt,0);const varBudget=varBills.reduce((s,b)=>s+b.amt,0);
@@ -663,9 +640,16 @@ const varActual=varBills.reduce((s,b)=>s+(moActuals[b.id]!=null?moActuals[b.id]:
 const varVariance=varActual-varBudget;
 const sarahTotal=allBills.filter(b=>moSplits[b.id]&&moSplits[b.id].confirmed).reduce((s,b)=>{const sp=moSplits[b.id];const actual=moActuals[b.id]!=null?moActuals[b.id]:b.amt;return s+actual*(sp.pct/100)},0);
 const paidCount=allBills.filter(b=>paidSet.has(b.id)).length;
-const[showAdd,setShowAdd]=useState(false);const[newBill,setNewBill]=useState({desc:"",amt:"",cat:"misc",kind:"fixed",group:""});
-const[editId,setEditId]=useState(null);const[editDesc,setEditDesc]=useState("");const[editAmt,setEditAmt]=useState("");
+const incomeAfterBills=bal.inc-fixedTotal-varCap;
+const[view,setView]=useState("list");const[sort,setSort]=useState("due");
+const[showAdd,setShowAdd]=useState(false);const[newBill,setNewBill]=useState({desc:"",amt:"",cat:"misc",kind:"fixed",group:"",due:1});
+const[editId,setEditId]=useState(null);const[editDesc,setEditDesc]=useState("");const[editAmt,setEditAmt]=useState("");const[editDue,setEditDue]=useState("");
 const[payPrompt,setPayPrompt]=useState(null);const[payAmt,setPayAmt]=useState("");
+
+const sortBills=(bills)=>{const s=[...bills];if(sort==="due")s.sort((a,b)=>(a.due||99)-(b.due||99));
+else if(sort==="amt")s.sort((a,b)=>b.amt-a.amt);else if(sort==="name")s.sort((a,b)=>a.desc.localeCompare(b.desc));
+else if(sort==="status")s.sort((a,b)=>(paidSet.has(a.id)?1:0)-(paidSet.has(b.id)?1:0));
+else if(sort==="group")s.sort((a,b)=>(a.group||"").localeCompare(b.group||""));return s};
 
 const toggleSplit=(bid)=>{const ms={...moSplits};if(ms[bid])delete ms[bid];else ms[bid]={pct:50,who:"sarah"};setSplits(p=>({...p,[mo]:ms}))};
 const setSplitPct=(bid,pct)=>{const ms={...moSplits};ms[bid]={...ms[bid],pct:+pct};setSplits(p=>({...p,[mo]:ms}))};
@@ -679,158 +663,150 @@ const gregAmt=sp?actual*(1-sp.pct/100):actual;
 addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (Greg ${100-sp.pct}%)`:""),amt:Math.round(gregAmt*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}]);
 if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (Sarah ${sp.pct}%)`,amt:Math.round(actual*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}])}};
 
-const confirmPayActual=()=>{if(!payPrompt)return;const ma={...(billActuals[mo]||{})};ma[payPrompt.id]=+payAmt;setBillActuals(p=>({...p,[mo]:ma}));setPayPrompt(null);
-setTimeout(()=>{const actual=+payAmt;const bill=payPrompt;const cur=new Set(billsPaid[mo]||[]);cur.add(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}));
+const confirmPayActual=()=>{if(!payPrompt)return;const ma={...(billActuals[mo]||{})};ma[payPrompt.id]=+payAmt;setBillActuals(p=>({...p,[mo]:ma}));
+const bill=payPrompt;const actual=+payAmt;setPayPrompt(null);
+setTimeout(()=>{const cur=new Set(billsPaid[mo]||[]);cur.add(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}));
 const sp=(moSplits[bill.id]&&moSplits[bill.id].confirmed)?moSplits[bill.id]:null;const gregAmt=sp?actual*(1-sp.pct/100):actual;
 addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (Greg ${100-sp.pct}%)`:""),amt:Math.round(gregAmt*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}]);
 if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (Sarah ${sp.pct}%)`,amt:Math.round(actual*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}])}},50)};
 
 const unpay=(bid)=>{const cur=new Set(billsPaid[mo]||[]);cur.delete(bid);setBillsPaid(p=>({...p,[mo]:[...cur]}))};
-const addBill=()=>{if(!newBill.desc||!newBill.amt)return;setRecurring(p=>[...p,{desc:newBill.desc,amt:+newBill.amt,cat:newBill.cat,kind:newBill.kind,group:newBill.group||"Other"}]);setNewBill({desc:"",amt:"",cat:"misc",kind:"fixed",group:""});setShowAdd(false)};
+const addBill=()=>{if(!newBill.desc||!newBill.amt)return;setRecurring(p=>[...p,{desc:newBill.desc,amt:+newBill.amt,cat:newBill.cat,kind:newBill.kind,group:newBill.group||"Other",due:+newBill.due||0}]);setNewBill({desc:"",amt:"",cat:"misc",kind:"fixed",group:"",due:1});setShowAdd(false)};
 const removeBill=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,st:"cancelled"}:s));else setRecurring(p=>p.filter((_,i)=>i!==b.idx))};
-const startEdit=(b)=>{setEditId(b.id);setEditDesc(b.desc);setEditAmt(String(b.amt))};
-const saveEdit=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,n:editDesc||s.n,a:+editAmt||s.a}:s));else setRecurring(p=>p.map((r,i)=>i===b.idx?{...r,desc:editDesc||r.desc,amt:+editAmt||r.amt}:r));setEditId(null)};
+const startEdit=(b)=>{setEditId(b.id);setEditDesc(b.desc);setEditAmt(String(b.amt));setEditDue(String(b.due||0))};
+const saveEdit=(b)=>{if(b.src==="subscription")setSubs(p=>p.map((s,i)=>i===b.origIdx?{...s,n:editDesc||s.n,a:+editAmt||s.a}:s));else setRecurring(p=>p.map((r,i)=>i===b.idx?{...r,desc:editDesc||r.desc,amt:+editAmt||r.amt,due:+editDue}:r));setEditId(null)};
 
-const renderBill=(b,i,arr)=>{const paid=paidSet.has(b.id);const isEdit=editId===b.id;const sp=moSplits[b.id];const actual=moActuals[b.id];const isVar=b.kind==="variable";const variance=isVar&&actual!=null?(actual-b.amt):null;
-return(<div key={b.id} style={{padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",opacity:paid?.55:1}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
-<button onClick={()=>paid?unpay(b.id):payBill(b)} style={{width:26,height:26,borderRadius:7,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-{paid&&<Check size={12} color="#080c18"/>}</button>
+const dueLabel=(d)=>{if(!d||d===0)return"Ongoing";if(d===1)return"1st";if(d===2)return"2nd";if(d===3)return"3rd";return d+"th"};
+const today=new Date().getDate();
+const dueStatus=(d)=>{if(!d||d===0)return{c:T.textDim,l:"flex"};if(paidSet.has(d))return{c:T.success,l:"paid"};return today>=(d?.due||0)?{c:T.warn,l:"due"}:{c:T.textDim,l:"upcoming"}};
+
+const renderRow=(b,i,arr)=>{const paid=paidSet.has(b.id);const isEdit=editId===b.id;const sp=moSplits[b.id];
+const actual=moActuals[b.id];const isVar=b.kind==="variable";const variance=isVar&&actual!=null?(actual-b.amt):null;
+const pastDue=b.due&&b.due>0&&today>b.due&&!paid;
+return(<div key={b.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",opacity:paid?.5:1,background:pastDue&&!paid?T.dangerBg:"transparent",borderRadius:pastDue?6:0,padding:pastDue?"10px 8px":"10px 0"}}>
+<button onClick={()=>paid?unpay(b.id):payBill(b)} style={{width:24,height:24,borderRadius:6,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+{paid&&<Check size={11} color="#080c18"/>}</button>
+<div style={{width:36,textAlign:"center",flexShrink:0}}>
+{b.due>0?<div style={{fontSize:11,fontWeight:700,color:paid?T.textDim:pastDue?T.danger:T.textMuted}}>{dueLabel(b.due)}</div>
+:<div style={{fontSize:9,color:T.textDim}}>—</div>}</div>
 <div style={{flex:1,minWidth:0}}>
-{isEdit?<input value={editDesc} onChange={e=>setEditDesc(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),fontSize:12,padding:"3px 6px",fontWeight:600}} autoFocus/>
+{isEdit?<input value={editDesc} onChange={e=>setEditDesc(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),fontSize:12,padding:"3px 6px"}} autoFocus/>
 :<div style={{fontSize:12,fontWeight:600,textDecoration:paid?"line-through":"none"}}>{b.desc}</div>}
-<div style={{display:"flex",gap:4,marginTop:2}}>
-{sp&&sp.confirmed&&<span style={pill(T.purpleBg,T.purple)}>Split {sp.pct}%</span>}
-{isVar&&<span style={pill(T.infoBg,T.info)}>Variable</span>}
+<div style={{display:"flex",gap:4,marginTop:1}}>
+{isVar&&<span style={pill(T.warnBg,T.warn)}>Var</span>}
+{b.group&&<span style={{fontSize:9,color:T.textDim}}>{b.group}</span>}
+{sp&&sp.confirmed&&<span style={pill(T.purpleBg,T.purple)}>Split</span>}
 </div></div>
-<div style={{textAlign:"right",minWidth:90}}>
-{isEdit?<div style={{display:"flex",gap:3,alignItems:"center"}}><span style={{color:T.textDim,fontSize:10}}>$</span><input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:70,fontSize:12,padding:"3px 6px",fontFamily:"'Space Mono',monospace"}}/></div>
-:<div>
-{isVar&&actual!=null&&actual!==b.amt?(<><div style={{fontSize:10,textDecoration:"line-through",color:T.textDim}}>{fmt(b.amt)}</div>
-<div style={{fontSize:14,fontWeight:700,fontFamily:"'Space Mono',monospace",color:paid?T.success:T.text}}>{fmt(actual)}</div>
-{variance!=null&&<div style={{fontSize:9,fontWeight:600,color:variance>0?T.danger:T.success}}>{variance>0?"+":""}{fmt(variance)}</div>}</>
-):(<div style={{fontSize:14,fontWeight:700,fontFamily:"'Space Mono',monospace",color:paid?T.success:T.text}}>{fmt(sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt)}</div>)}
-{sp&&sp.confirmed&&<div style={{fontSize:9,color:T.purple}}>full: {fmt(b.amt)}</div>}
-</div>}
-</div>
-<div style={pill(paid?T.successBg:T.warnBg,paid?T.success:T.warn)}>{paid?"Paid":"Due"}</div>
+{isVar?(<div style={{display:"grid",gridTemplateColumns:"55px 55px 50px",gap:2,textAlign:"right"}}>
+{isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:55,fontSize:10,padding:"2px 4px",fontFamily:"'Space Mono',monospace"}}/>
+:<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(b.amt)}</div>}
+<div style={{fontSize:11,fontFamily:"'Space Mono',monospace",color:actual!=null?(actual>b.amt?T.danger:T.success):T.textDim}}>{actual!=null?fmt(actual):"—"}</div>
+{variance!=null?<div style={{fontSize:10,fontFamily:"'Space Mono',monospace",color:variance>0?T.danger:T.success}}>{variance>0?"+":""}{fmt(variance)}</div>
+:<div style={{fontSize:10,color:T.textDim}}>—</div>}
+</div>):(<div style={{textAlign:"right",minWidth:70}}>
+{isEdit?<input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")saveEdit(b);if(e.key==="Escape")setEditId(null)}} style={{...inpS(T),width:70,fontSize:12,padding:"3px 6px",fontFamily:"'Space Mono',monospace"}}/>
+:<div style={{fontSize:13,fontWeight:700,fontFamily:"'Space Mono',monospace",color:paid?T.success:T.text}}>{fmt(sp&&sp.confirmed?b.amt*(1-sp.pct/100):b.amt)}</div>}
+</div>)}
+{isEdit&&<div style={{width:40}}><input type="number" value={editDue} onChange={e=>setEditDue(e.target.value)} placeholder="Day" style={{...inpS(T),width:40,fontSize:10,padding:"2px 4px"}}/></div>}
 <div style={{display:"flex",gap:1}}>
-{isEdit?(<><button onClick={()=>saveEdit(b)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",padding:3}}><Check size={12}/></button>
-<button onClick={()=>setEditId(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:3}}><X size={12}/></button></>
-):(<>{!paid&&<button onClick={()=>startEdit(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:3,opacity:.4}}><Edit3 size={11}/></button>}
-<button onClick={()=>toggleSplit(b.id)} style={{background:"none",border:"none",color:sp?T.purple:T.textDim,cursor:"pointer",padding:3,opacity:sp?1:.3}}>👥</button>
-<button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:3,opacity:.3}}><Trash2 size={11}/></button></>)}
-</div></div>
-{sp&&!paid&&!sp.confirmed&&<div style={{marginLeft:34,marginTop:4,padding:"6px 10px",background:T.purpleBg,borderRadius:8}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
-<span style={{fontSize:9,color:T.purple,fontWeight:600}}>Sarah:</span>
-<input type="range" min={10} max={90} step={5} value={sp.pct} onChange={e=>setSplitPct(b.id,e.target.value)} style={{flex:1,accentColor:T.purple}}/>
-<span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{sp.pct}%</span>
-<span style={{fontSize:9,color:T.textDim}}>= {fmt(b.amt*sp.pct/100)}</span></div>
-<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"3px 10px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm</button></div>}
-{sp&&sp.confirmed&&!paid&&<div style={{marginLeft:34,marginTop:3,display:"flex",gap:6,alignItems:"center"}}>
-<span style={pill(T.successBg,T.success)}>✓ Split confirmed</span>
-<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:false};setSplits(p=>({...p,[mo]:ms}))}} style={{fontSize:9,color:T.textDim,background:"none",border:"none",cursor:"pointer"}}>edit</button></div>}
+{isEdit?(<><button onClick={()=>saveEdit(b)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",padding:2}}><Check size={11}/></button>
+<button onClick={()=>setEditId(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2}}><X size={11}/></button></>
+):(<>{!paid&&<button onClick={()=>startEdit(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2,opacity:.3}}><Edit3 size={10}/></button>}
+<button onClick={()=>toggleSplit(b.id)} style={{background:"none",border:"none",color:sp?T.purple:T.textDim,cursor:"pointer",padding:2,opacity:sp?1:.2}}><User size={10}/></button>
+<button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2,opacity:.2}}><Trash2 size={10}/></button></>)}</div>
 </div>)};
 
 return(<div>
 {payPrompt&&<Modal onClose={()=>setPayPrompt(null)} T={T}>
 <div style={{fontSize:16,fontWeight:700,marginBottom:12}}>How much was {payPrompt.desc}?</div>
-<div style={{fontSize:11,color:T.textDim,marginBottom:12}}>Budget was {fmt(payPrompt.amt)} — enter the actual amount</div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:12}}>Budget: {fmt(payPrompt.amt)} — enter actual</div>
 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16}}>
 <span style={{fontSize:16,color:T.textDim}}>$</span>
-<input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} onKeyDown={e=>e.key==="Enter"&&confirmPayActual()} style={{...inpS(T),fontSize:20,fontFamily:"'Space Mono',monospace",padding:"10px 14px"}} autoFocus/>
-</div>
+<input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} onKeyDown={e=>e.key==="Enter"&&confirmPayActual()} style={{...inpS(T),fontSize:20,fontFamily:"'Space Mono',monospace",padding:"10px 14px"}} autoFocus/></div>
 {+payAmt!==payPrompt.amt&&<div style={{fontSize:12,marginBottom:12,color:+payAmt>payPrompt.amt?T.danger:T.success,fontWeight:600}}>
-{+payAmt>payPrompt.amt?`$${(+payAmt-payPrompt.amt).toFixed(2)} over budget`:`$${(payPrompt.amt-+payAmt).toFixed(2)} under budget`}</div>}
-<div style={{display:"flex",gap:8}}><button onClick={confirmPayActual} style={{...btnS(T,true),flex:1,justifyContent:"center"}}><Check size={12}/>Mark Paid — {fmt(+payAmt)}</button>
-<button onClick={()=>setPayPrompt(null)} style={btnS(T,false)}>Cancel</button></div></Modal>}
+{+payAmt>payPrompt.amt?`+${fmt(+payAmt-payPrompt.amt)} over`:`${fmt(payPrompt.amt-+payAmt)} under`}</div>}
+<button onClick={confirmPayActual} style={{...btnS(T,true),width:"100%",justifyContent:"center"}}><Check size={12}/>Mark Paid — {fmt(+payAmt)}</button></Modal>}
 
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
-<div style={{...glass(T),textAlign:"center"}}>
-<div style={{position:"relative",width:60,height:60,margin:"0 auto 6px"}}>
-<svg width={60} height={60} style={{transform:"rotate(-90deg)"}}><circle cx={30} cy={30} r={25} fill="none" stroke={T.border} strokeWidth={4}/>
-<circle cx={30} cy={30} r={25} fill="none" stroke={T.success} strokeWidth={4} strokeDasharray={2*Math.PI*25} strokeDashoffset={2*Math.PI*25*(1-paidCount/Math.max(allBills.length,1))} strokeLinecap="round"/></svg>
-<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{paidCount}/{allBills.length}</div></div>
-<div style={{fontSize:9,color:T.textDim}}>paid</div></div>
-<StatCard title="Fixed" value={fmt(fixedTotal)} icon={Lock} color={T.info} T={T} subtitle={fixedBills.length+" bills"}/>
-<StatCard title="Variable Cap" value={fmt(varCap)} icon={Activity} color={T.warn} T={T} subtitle={varActual>0?"Actual: "+fmt(varActual):"Allocated: "+fmt(varBudget)}/>
-{varActual>0&&<StatCard title="Variance" value={(varActual-varCap>=0?"+":"")+fmt(varActual-varCap)} icon={varActual>varCap?TrendingUp:TrendingDown} color={varActual>varCap?T.danger:T.success} T={T} subtitle={varActual>varCap?"Spills into budget":"Under cap"}/>}
+<div style={{...glass(T),marginBottom:14}}>
+<div style={lbl(T)}>Paycheck Breakdown</div>
+<div style={{display:"flex",gap:4,alignItems:"stretch",marginBottom:8}}>
+{[{l:"Income",v:bal.inc,c:T.success},{l:"Fixed",v:fixedTotal,c:T.info},{l:"Var Cap",v:varCap,c:T.warn},{l:"For Spending",v:Math.max(incomeAfterBills,0),c:T.purple}].map((s,i)=>(
+<div key={i} style={{flex:Math.max(s.v,1)/bal.inc,background:s.c+"15",borderRadius:8,padding:"10px 6px",textAlign:"center",border:`1px solid ${s.c}25`,minWidth:50}}>
+<div style={{fontSize:8,color:s.c,fontWeight:700,textTransform:"uppercase"}}>{s.l}</div>
+<div style={{fontSize:14,fontWeight:800,fontFamily:"'Space Mono',monospace",color:s.c}}>{fmt(s.v)}</div></div>))}</div>
+{incomeAfterBills<0&&<div style={{padding:"6px 10px",background:T.dangerBg,borderRadius:6,fontSize:11,color:T.danger,fontWeight:600}}>⚠️ Bills exceed income by {fmt(Math.abs(incomeAfterBills))}</div>}
+</div>
+
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:8,marginBottom:14}}>
+<div style={{...glass(T),textAlign:"center",padding:14}}>
+<div style={{position:"relative",width:50,height:50,margin:"0 auto 4px"}}>
+<svg width={50} height={50} style={{transform:"rotate(-90deg)"}}><circle cx={25} cy={25} r={21} fill="none" stroke={T.border} strokeWidth={3}/>
+<circle cx={25} cy={25} r={21} fill="none" stroke={T.success} strokeWidth={3} strokeDasharray={2*Math.PI*21} strokeDashoffset={2*Math.PI*21*(1-paidCount/Math.max(allBills.length,1))} strokeLinecap="round"/></svg>
+<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:T.success}}>{paidCount}/{allBills.length}</div></div></div>
+<StatCard title="Fixed" value={fmt(fixedTotal)} icon={Lock} color={T.info} T={T}/>
+<StatCard title="Var Cap" value={fmt(varCap)} icon={Activity} color={T.warn} T={T}/>
+{varActual>0&&<StatCard title="+/-" value={(varActual-varCap>=0?"+":"")+fmt(varActual-varCap)} icon={varActual>varCap?TrendingUp:TrendingDown} color={varActual>varCap?T.danger:T.success} T={T}/>}
 {sarahTotal>0&&<StatCard title="Sarah" value={fmt(sarahTotal)} icon={User} color={T.purple} T={T}/>}</div>
 
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-<div style={{fontSize:11,color:T.textDim}}>Total allocated: <strong style={{color:T.text}}>{fmt(fixedTotal+varCap)}</strong>/mo from {fmt(bal.inc)} income — <span style={{color:T.success}}>{fmt(bal.inc-fixedTotal-varCap)}</span> left for spending</div>
-<button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={11}/>Add</button></div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+<div style={{display:"flex",gap:4}}>
+{[{id:"list",l:"List"},{id:"group",l:"By Group"},{id:"timeline",l:"Timeline"}].map(v=>(
+<button key={v.id} onClick={()=>setView(v.id)} style={{...btnS(T,view===v.id),fontSize:10,padding:"5px 10px"}}>{v.l}</button>))}
+</div>
+<div style={{display:"flex",gap:4,alignItems:"center"}}>
+<span style={{fontSize:9,color:T.textDim}}>Sort:</span>
+<select value={sort} onChange={e=>setSort(e.target.value)} style={{...inpS(T),fontSize:10,padding:"4px 8px",width:"auto"}}>
+<option value="due">Due Date</option><option value="amt">Amount</option><option value="name">Name</option><option value="status">Status</option><option value="group">Group</option></select>
+<button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={11}/>Add</button></div></div>
 
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
-<div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
-<div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Name</div><input placeholder="Bill name" value={newBill.desc} onChange={e=>setNewBill(p=>({...p,desc:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
-<div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Amount</div><input type="number" placeholder="$" value={newBill.amt} onChange={e=>setNewBill(p=>({...p,amt:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
-<div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Type</div><select value={newBill.kind} onChange={e=>setNewBill(p=>({...p,kind:e.target.value}))} style={{...inpS(T),fontSize:11}}>
-<option value="fixed">Fixed</option><option value="variable">Variable</option></select></div>
-<div><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Group</div><input placeholder="Housing..." value={newBill.group} onChange={e=>setNewBill(p=>({...p,group:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div style={{display:"grid",gridTemplateColumns:"2fr 1fr 60px 1fr 1fr auto",gap:6,alignItems:"end"}}>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Name</div><input placeholder="Bill" value={newBill.desc} onChange={e=>setNewBill(p=>({...p,desc:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Amount</div><input type="number" placeholder="$" value={newBill.amt} onChange={e=>setNewBill(p=>({...p,amt:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Due</div><input type="number" placeholder="Day" min={0} max={31} value={newBill.due} onChange={e=>setNewBill(p=>({...p,due:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Type</div><select value={newBill.kind} onChange={e=>setNewBill(p=>({...p,kind:e.target.value}))} style={{...inpS(T),fontSize:11}}><option value="fixed">Fixed</option><option value="variable">Variable</option></select></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Group</div><input placeholder="Housing..." value={newBill.group} onChange={e=>setNewBill(p=>({...p,group:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
 <button onClick={addBill} style={btnS(T,true)}><Check size={12}/></button></div></div>}
 
-<div style={glass(T)}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-<div style={lbl(T)}>Fixed Bills — {fmt(fixedTotal)}/mo</div></div>
-{Object.entries(fixedBills.reduce((g,b)=>{const k=b.group||"Other";if(!g[k])g[k]=[];g[k].push(b);return g},{})).map(([group,bills])=>(
-<div key={group}><div style={{fontSize:10,fontWeight:700,color:T.textMuted,padding:"8px 0 4px",borderBottom:`1px solid ${T.border}`}}>{group}</div>
-{bills.map((b,i)=>renderBill(b,i,bills))}</div>))}</div>
-
+{view==="list"&&<><div style={glass(T)}>
+<div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+<div style={lbl(T)}>Fixed Bills — {fmt(fixedTotal)}</div></div>
+{sortBills(fixedBills).map((b,i)=>renderRow(b,i,fixedBills))}</div>
 <div style={{...glass(T),marginTop:14}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
 <div style={lbl(T)}>Variable Bills</div>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
-<span style={{fontSize:10,color:T.textDim}}>Monthly cap:</span>
-<span style={{fontSize:10,color:T.textDim}}>$</span>
-<input type="number" value={varCap} onChange={e=>setVarCap(+e.target.value)} style={{...inpS(T),width:70,fontSize:12,padding:"4px 8px",fontFamily:"'Space Mono',monospace",fontWeight:700}}/>
-</div></div>
-<div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.textDim,padding:"6px 0",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-<span>Allocated from cap: {fmt(varBudget)} of {fmt(varCap)} ({varCap>0?(varBudget/varCap*100).toFixed(0):0}%)</span>
-{varActual>0&&<span>Actual total: <strong style={{color:varActual>varCap?T.danger:T.success}}>{fmt(varActual)}</strong> {varActual>varCap?<span style={{color:T.danger}}>⚠️ {fmt(varActual-varCap)} over cap → spills into budget</span>:<span style={{color:T.success}}>✓ under cap</span>}</span>}
-</div>
-{varBills.map((b,i)=>{const paid=paidSet.has(b.id);const actual=moActuals[b.id];const hasActual=actual!=null;const variance=hasActual?(actual-b.amt):null;
-return(<div key={b.id} style={{padding:"10px 0",borderBottom:i<varBills.length-1?`1px solid ${T.border}`:"none",opacity:paid?.55:1}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
-<button onClick={()=>paid?unpay(b.id):payBill(b)} style={{width:26,height:26,borderRadius:7,border:`2px solid ${paid?T.success:T.border}`,background:paid?T.success:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-{paid&&<Check size={12} color="#080c18"/>}</button>
-<div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,textDecoration:paid?"line-through":"none"}}>{b.desc}</div>
-<div style={{display:"flex",gap:4,marginTop:2}}>
-<span style={pill(T.warnBg,T.warn)}>{b.group||"Variable"}</span>
-{moSplits[b.id]&&moSplits[b.id].confirmed&&<span style={pill(T.purpleBg,T.purple)}>Split {moSplits[b.id].pct}%</span>}
-</div></div>
-<div style={{display:"grid",gridTemplateColumns:"70px 70px 60px",gap:4,textAlign:"right",fontSize:10}}>
-<div><div style={{color:T.textDim,fontSize:8,marginBottom:1}}>BUDGET</div>
-<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(b.amt)}</div></div>
-<div><div style={{color:T.textDim,fontSize:8,marginBottom:1}}>ACTUAL</div>
-{hasActual?<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:actual>b.amt?T.danger:T.success}}>{fmt(actual)}</div>
-:<div style={{color:T.textDim}}>—</div>}</div>
-<div><div style={{color:T.textDim,fontSize:8,marginBottom:1}}>+/-</div>
-{variance!=null?<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:variance>0?T.danger:T.success,fontSize:11}}>{variance>0?"+":""}{fmt(variance)}</div>
-:<div style={{color:T.textDim}}>—</div>}</div></div>
-<div style={pill(paid?T.successBg:T.warnBg,paid?T.success:T.warn)}>{paid?"Paid":"Due"}</div>
-<div style={{display:"flex",gap:1}}>
-{!paid&&<button onClick={()=>startEdit(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:3,opacity:.4}}><Edit3 size={11}/></button>}
-<button onClick={()=>toggleSplit(b.id)} style={{background:"none",border:"none",color:moSplits[b.id]?T.purple:T.textDim,cursor:"pointer",padding:3,opacity:moSplits[b.id]?1:.3}}>👥</button>
-<button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:3,opacity:.3}}><Trash2 size={11}/></button>
-</div></div>
-{moSplits[b.id]&&!paid&&!moSplits[b.id].confirmed&&<div style={{marginLeft:34,marginTop:4,padding:"6px 10px",background:T.purpleBg,borderRadius:8}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
-<span style={{fontSize:9,color:T.purple,fontWeight:600}}>Sarah:</span>
-<input type="range" min={10} max={90} step={5} value={moSplits[b.id].pct} onChange={e=>setSplitPct(b.id,e.target.value)} style={{flex:1,accentColor:T.purple}}/>
-<span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{moSplits[b.id].pct}%</span></div>
-<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"3px 10px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm</button></div>}
-</div>)})}
-{varBills.length===0&&<div style={{padding:20,textAlign:"center",color:T.textDim,fontSize:12}}>No variable bills</div>}
-<div style={{borderTop:`1px solid ${T.border}`,padding:"8px 0 0",marginTop:4,display:"grid",gridTemplateColumns:"1fr 70px 70px 60px 1fr",gap:4,textAlign:"right",fontSize:11}}>
-<div style={{textAlign:"left",fontWeight:700}}>Totals</div>
-<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.info}}>{fmt(varBudget)}</div>
-<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:varActual>varCap?T.danger:T.success}}>{varActual>0?fmt(varActual):"—"}</div>
-<div style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:varVariance>0?T.danger:T.success}}>{varActual>0?(varVariance>0?"+":"")+fmt(varVariance):"—"}</div>
-<div></div></div></div>
+<div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:9,color:T.textDim}}>Cap: $</span>
+<input type="number" value={varCap} onChange={e=>setVarCap(+e.target.value)} style={{...inpS(T),width:60,fontSize:11,padding:"3px 6px",fontWeight:700}}/></div></div>
+{varBills.length>0&&<div style={{display:"grid",gridTemplateColumns:"24px 36px 1fr 55px 55px 50px auto",gap:2,padding:"4px 0",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
+<div/><div/><div/><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>BUDGET</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>ACTUAL</div><div style={{fontSize:8,color:T.textDim,textAlign:"right"}}>+/-</div><div/></div>}
+{sortBills(varBills).map((b,i)=>renderRow(b,i,varBills))}
+{varActual>0&&<div style={{borderTop:`1px solid ${T.border}`,padding:"8px 0 0",marginTop:4,display:"flex",justifyContent:"space-between",fontSize:11}}>
+<span style={{fontWeight:700}}>Totals</span>
+<span>Budget: <strong style={{color:T.info}}>{fmt(varBudget)}</strong> | Actual: <strong style={{color:varActual>varCap?T.danger:T.success}}>{fmt(varActual)}</strong> | Cap: <strong>{fmt(varCap)}</strong></span></div>}
+</div></>}
 
-<div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
+{view==="group"&&<div style={glass(T)}>
+{Object.entries(sortBills(allBills).reduce((g,b)=>{const k=b.group||"Other";if(!g[k])g[k]=[];g[k].push(b);return g},{})).map(([group,bills])=>(
+<div key={group} style={{marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 4px",borderBottom:`1px solid ${T.border}`}}>
+<span style={{fontSize:11,fontWeight:700,color:T.textMuted}}>{group}</span>
+<span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace"}}>{fmt(bills.reduce((s,b)=>s+b.amt,0))}</span></div>
+{bills.map((b,i)=>renderRow(b,i,bills))}</div>))}</div>}
+
+{view==="timeline"&&<div style={glass(T)}>
+<div style={lbl(T)}>Bills by Due Date</div>
+{Array.from({length:31},(_,d)=>d+1).filter(d=>allBills.some(b=>b.due===d)).map(d=>{
+const dayBills=sortBills(allBills.filter(b=>b.due===d));const pastDue=today>d;
+return(<div key={d} style={{marginBottom:10}}>
+<div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:`1px solid ${T.border}`}}>
+<div style={{width:32,height:32,borderRadius:8,background:pastDue?T.warnBg:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:pastDue?T.warn:T.text}}>{d}</div>
+<span style={{fontSize:11,color:T.textMuted}}>{dayBills.length} bill{dayBills.length>1?"s":""} — {fmt(dayBills.reduce((s,b)=>s+b.amt,0))}</span></div>
+{dayBills.map((b,i)=>renderRow(b,i,dayBills))}</div>)})}
+{allBills.filter(b=>!b.due||b.due===0).length>0&&<div style={{marginTop:10}}>
+<div style={{padding:"4px 0",borderBottom:`1px solid ${T.border}`,fontSize:11,color:T.textMuted}}>Ongoing / No fixed date</div>
+{sortBills(allBills.filter(b=>!b.due||b.due===0)).map((b,i,arr)=>renderRow(b,i,arr))}</div>}</div>}
+
+<div style={{marginTop:10,fontSize:10,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
 <span>Variable bills prompt for actual amount when paid</span>
 <span>Annual: <strong style={{color:T.warn}}>{fmt((fixedTotal+varCap)*12)}</strong>/yr</span></div>
 </div>)}
@@ -1209,22 +1185,22 @@ throw new Error("Unknown provider: "+p)};
 const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());
 const[keySaved,setKeySaved]=useState(false);
 const[recurring,setRecurring]=useState([
-{desc:"Rent",amt:1200,cat:"misc",kind:"fixed",group:"Housing"},
-{desc:"Insurance",amt:10,cat:"misc",kind:"fixed",group:"Housing"},
-{desc:"BCU Loan",amt:345,cat:"loan",kind:"fixed",group:"Loans"},
-{desc:"Mint Mobile",amt:30,cat:"misc",kind:"fixed",group:"Communications"},
-{desc:"UFC Fit",amt:120,cat:"rec",kind:"fixed",group:"Subscriptions"},
-{desc:"Spotify",amt:9.26,cat:"misc",kind:"fixed",group:"Subscriptions"},
-{desc:"ChatGPT",amt:11,cat:"misc",kind:"fixed",group:"Subscriptions"},
-{desc:"Prime",amt:8,cat:"misc",kind:"fixed",group:"Subscriptions"},
-{desc:"Netflix",amt:4,cat:"misc",kind:"fixed",group:"Subscriptions"},
-{desc:"Cloud Storage",amt:12.99,cat:"misc",kind:"fixed",group:"Subscriptions"},
-{desc:"Photoshop",amt:7.50,cat:"misc",kind:"fixed",group:"Subscriptions"},
-{desc:"Internet",amt:22.50,cat:"misc",kind:"fixed",group:"Subscriptions"},
-{desc:"Groceries",amt:500,cat:"groceries",kind:"variable",group:"Groceries"},
-{desc:"Electric",amt:50,cat:"electric",kind:"variable",group:"Utilities"},
-{desc:"Gas",amt:15,cat:"gas",kind:"variable",group:"Utilities"},
-{desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation"}]);
+{desc:"Rent",amt:1200,cat:"misc",kind:"fixed",group:"Housing",due:1},
+{desc:"Insurance",amt:10,cat:"misc",kind:"fixed",group:"Housing",due:1},
+{desc:"BCU Loan",amt:345,cat:"loan",kind:"fixed",group:"Loans",due:18},
+{desc:"Mint Mobile",amt:30,cat:"misc",kind:"fixed",group:"Communications",due:5},
+{desc:"UFC Fit",amt:120,cat:"rec",kind:"fixed",group:"Subscriptions",due:1},
+{desc:"Spotify",amt:9.26,cat:"misc",kind:"fixed",group:"Subscriptions",due:15},
+{desc:"ChatGPT",amt:11,cat:"misc",kind:"fixed",group:"Subscriptions",due:10},
+{desc:"Prime",amt:8,cat:"misc",kind:"fixed",group:"Subscriptions",due:12},
+{desc:"Netflix",amt:4,cat:"misc",kind:"fixed",group:"Subscriptions",due:8},
+{desc:"Cloud Storage",amt:12.99,cat:"misc",kind:"fixed",group:"Subscriptions",due:15},
+{desc:"Photoshop",amt:7.50,cat:"misc",kind:"fixed",group:"Subscriptions",due:15},
+{desc:"Internet",amt:22.50,cat:"misc",kind:"fixed",group:"Subscriptions",due:1},
+{desc:"Groceries",amt:500,cat:"groceries",kind:"variable",group:"Groceries",due:0},
+{desc:"Electric",amt:50,cat:"electric",kind:"variable",group:"Utilities",due:20},
+{desc:"Gas",amt:15,cat:"gas",kind:"variable",group:"Utilities",due:20},
+{desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation",due:0}]);
 const[billsPaid,setBillsPaid]=useState({});
 const[billActuals,setBillActuals]=useState({});
 const[splits,setSplits]=useState({});
@@ -1315,7 +1291,7 @@ setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(
 const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
-case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
+case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} cur={cur}/>;
 case"sub":return<BillsPage T={T} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal} varCap={varCap} setVarCap={setVarCap}/>;
