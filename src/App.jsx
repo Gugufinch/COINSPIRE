@@ -99,8 +99,16 @@ const DEFAULT_CATS=[
 {id:"ira",name:"Roth IRA",budget:200,icon:"📈"},
 {id:"loan",name:"Extra Loan",budget:1057,icon:"💳"}];
 
-const AUTO_CAT_MAP={marianos:"groceries",target:"shop",walgreens:"shop",uber:"transport",lyft:"transport",ventra:"transport",starbucks:"rec",amazon:"shop",costco:"groceries",aldi:"groceries",trader:"groceries",whole:"groceries",jewel:"groceries",restaurant:"rec",bar:"rec",coffee:"rec",gas:"gas",shell:"gas",electric:"electric",comed:"electric",salon:"misc",cvs:"shop"};
-const autoCat=desc=>{const l=desc.toLowerCase();for(const[k,v]of Object.entries(AUTO_CAT_MAP))if(l.includes(k))return v;return"misc"};
+const AUTO_CAT_MAP={marianos:"groceries",target:"shop",walgreens:"shop",uber:"transport",lyft:"transport",ventra:"transport",starbucks:"rec",amazon:"shop",costco:"groceries",aldi:"groceries",trader:"groceries",whole:"groceries",jewel:"groceries",restaurant:"rec",bar:"rec",coffee:"rec",gas:"gas",shell:"gas",electric:"electric",comed:"electric",salon:"misc",cvs:"shop",
+michaels:"shop",marshalls:"shop",marshals:"shop",walmart:"shop",dollar:"shop",bath:"shop",
+wingstop:"rec",chipotle:"rec",mcdonald:"rec",subway:"rec",dunkin:"rec",panera:"rec",
+grubhub:"rec",doordash:"rec","uber eat":"rec",postmates:"rec",
+tap:"rec",grill:"rec",diner:"rec",pizza:"rec",burger:"rec",sushi:"rec",taco:"rec",
+brewery:"rec",pub:"rec",lounge:"rec",tavern:"rec",bistro:"rec",cafe:"rec",
+gym:"rec",fitness:"rec",
+fedex:"misc",ups:"misc",usps:"misc",
+protein:"shop",supplement:"shop",vitamin:"shop"};
+const autoCat=desc=>{const l=desc.toLowerCase();for(const[k,v]of Object.entries(AUTO_CAT_MAP))if(l.includes(k))return v;return null};
 
 const SAMPLE_TXNS=[
 {id:1,d:"2026-03-01",desc:"Marianos groceries",amt:42.17,cat:"groceries",card:"chase"},
@@ -115,7 +123,7 @@ const SAMPLE_TXNS=[
 const DEBTS_DEFAULT=[
 {id:"upstart",name:"Upstart",bal:1999,rate:10.5,minPay:150,status:"active"},
 {id:"edfin",name:"EdFinancial",bal:4898,rate:5.0,minPay:0,status:"hold",note:"Interest accruing"},
-{id:"bcu",name:"BCU Loan",bal:0,rate:0,minPay:345,status:"active",note:"$345/mo"},
+{id:"bcu",name:"BCU Loan",bal:0,rate:0,minPay:345,status:"paid",note:"Completed"},
 {id:"discover",name:"Discover",bal:0,status:"paid"},
 {id:"sba",name:"SBA Loan",bal:0,status:"paid"},
 {id:"firstmark",name:"Firstmark",bal:0,status:"paid"},
@@ -323,12 +331,14 @@ return(<div style={glass(T)}>
 <div style={{fontSize:10,color:T.textDim,marginTop:3}}>Side {fmt(sideInc)}/mo of {fmt(burn)}/mo</div>
 </div></div>)}
 
-function StreaksW({txns,budget,day,T}){
+function StreaksW({txns,budget,day,T,debts}){
 const dailyB=budget/30;let streak=0;
 for(let d=day;d>=1;d--){const ds=txns.filter(t=>parseInt(t.d.split("-")[2])===d).reduce((s,t)=>s+t.amt,0);if(ds<=dailyB*1.5)streak++;else break}
+const debtsPaid=debts?debts.filter(d=>d.status==="paid").length:7;const debtsTotal=debts?debts.length:10;
+const trackMo=HISTORY.length;
 const st=[{icon:"🔥",l:"Budget Streak",v:`${streak}d`,s:`${streak} days in target`,c:T.success},
-{icon:"💳",l:"Debts Crushed",v:"7",s:"7 of 10 eliminated",c:T.info},
-{icon:"📊",l:"Tracking",v:"17mo",s:"Consecutive months",c:T.purple}];
+{icon:"💳",l:"Debts Crushed",v:String(debtsPaid),s:`${debtsPaid} of ${debtsTotal} eliminated`,c:T.info},
+{icon:"📊",l:"Tracking",v:`${trackMo}mo`,s:"Consecutive months",c:T.purple}];
 return(<div style={glass(T)}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
 <div style={lbl(T)}>Streaks & Wins</div><Award size={14} color={T.warn}/></div>
@@ -358,7 +368,7 @@ return(<div style={glass(T)}><div style={lbl(T)}>Daily Spending</div>
 // PAGES
 // ═══════════════════════════════════════════════════
 function DashPage({T,accent,data,qa,setQa,addQA}){
-const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc}=data;
+const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc,debts}=data;
 const nwC=nwP!==0?((nw-nwP)/Math.abs(nwP)*100):0;
 const dC=prev.loans>0?((totD-prev.loans)/prev.loans*100):0;
 const totalSav=cur.sav+cur.ira+cur.stk+(cur.jnt/2);
@@ -380,7 +390,7 @@ placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),b
 <RunwayCalc savings={totalSav} burn={avgBurn} T={T}/></div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:14,marginTop:14}}>
 <FreedomDate savings={totalSav} burn={avgBurn} sideInc={sideInc} T={T}/>
-<StreaksW txns={txns} budget={totB} day={day} T={T}/></div>
+<StreaksW txns={txns.filter(t=>!t.isBill)} budget={totB} day={day} T={T} debts={data.debts}/></div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
 <div style={glass(T)}><div style={lbl(T)}>Net Worth Trend</div>
 <ResponsiveContainer width="100%" height={180}>
@@ -391,7 +401,7 @@ placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),b
 <YAxis tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`}/>
 <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,fontSize:11,color:T.text}} formatter={v=>[fmt(v),"NW"]}/>
 <Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
-<SpendHeatmap txns={txns} dim={dim} off={mOff} T={T}/></div></div>)}
+<SpendHeatmap txns={txns.filter(t=>!t.isBill)} dim={dim} off={mOff} T={T}/></div></div>)}
 
 function TxnPage({T,txns,setTxns,addTxnsSmart,cats,byCat,mo,apiKey,aiModel,callAI,provider}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[cardF,setCardF]=useState("");const[showAdd,setShowAdd]=useState(false);
@@ -410,9 +420,9 @@ const handleImageUpload=e=>{const file=e.target.files?.[0];if(!file)return;
 const reader=new FileReader();reader.onload=ev=>{const b64=ev.target.result;setScanPreview(b64);setScanImg(b64.split(",")[1])};reader.readAsDataURL(file)};
 
 const parseCSV=(txt,bank)=>{try{const lines=txt.trim().split("\n").slice(1);return lines.map(l=>{const c=l.split(",").map(x=>x.replace(/"/g,"").trim());
-if(bank==="chase"){const a=Math.abs(parseFloat(c[5]));if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[2],amt:a,cat:autoCat(c[2]),card:"chase"}}
-if(bank==="capitalone"){const a=parseFloat(c[5])||0;if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[3],amt:a,cat:autoCat(c[3]),card:"capitalone"}}
-if(bank==="debit"){const a=Math.abs(parseFloat(c[2]));if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[1],amt:a,cat:autoCat(c[1]),card:"debit"}}
+if(bank==="chase"){const a=Math.abs(parseFloat(c[5]));if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[2],amt:a,cat:autoCat(c[2])||"misc",card:"chase"}}
+if(bank==="capitalone"){const a=parseFloat(c[5])||0;if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[3],amt:a,cat:autoCat(c[3])||"misc",card:"capitalone"}}
+if(bank==="debit"){const a=Math.abs(parseFloat(c[2]));if(!a)return null;return{id:Date.now()+Math.random(),d:c[0],desc:c[1],amt:a,cat:autoCat(c[1])||"misc",card:"debit"}}
 return null}).filter(Boolean)}catch{return[]}};
 
 const scanImage=async()=>{if(!scanImg){setScanError("No image selected");return}
@@ -601,7 +611,7 @@ return(<div key={c.id} style={{padding:"14px 0",borderBottom:i<cats.length-1?`1p
 function DebtPage({T,debts,setDebts}){
 const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal===0&&d.status==="paid");
 const totalDebt=active.reduce((s,d)=>s+(d.bal||0),0);
-const payoffs=active.map(d=>{const pay=d.minPay||345;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
+const payoffs=active.filter(d=>d.minPay>0).map(d=>{const pay=d.minPay;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
 while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:Math.max(0,rem)});rem-=pay;m++;dt.setMonth(dt.getMonth()+1)}
 if(rem<=0)pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:0});
 return{...d,pts,freeDate:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,months:m}});
@@ -629,7 +639,12 @@ return(<div>
 {paid.length>0&&<div style={glass(T)}>
 <div style={lbl(T)}>Eliminated 💀</div>
 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-{paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name}</div>)}</div></div>}</div>)}
+{paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name}</div>)}</div></div>}
+{active.filter(d=>!d.minPay||d.minPay===0).length>0&&<div style={glass(T)}>
+<div style={lbl(T)}>On Hold ⏸️</div>
+{active.filter(d=>!d.minPay||d.minPay===0).map(d=><div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
+<div><span style={{fontWeight:600}}>{d.name}</span><span style={{fontSize:10,color:T.textDim,marginLeft:8}}>{d.note||"No payments"}</span></div>
+<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</span></div>)}</div>}</div>)}
 
 function BillsPage({T,recurring,setRecurring,subs,setSubs,billsPaid,setBillsPaid,splits,setSplits,mo,addTxnsSmart}){
 const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,idx:i,desc:r.desc,amt:r.amt,cat:r.cat,type:"bill",src:"recurring"})),
@@ -1006,7 +1021,7 @@ const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"
 const setCats=fn=>setMonths(p=>({...p,[mo]:{...p[mo],budgets:typeof fn==="function"?fn(p[mo]?.budgets||DEFAULT_CATS):fn}}));
 
 // Smart add: routes transactions to correct month by date
-const dateToMK=d=>{try{const dt=new Date(d);if(isNaN(dt))return mo;return`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`}catch{return mo}};
+const dateToMK=d=>{try{const parts=String(d).split("-");if(parts.length===3){const mo=parseInt(parts[1])-1;const yr=parseInt(parts[0]);return`${MO[mo]}'${String(yr).slice(2)}`}const dt=new Date(d+"T12:00:00");if(isNaN(dt))return mo;return`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`}catch{return mo}};
 const addTxnsSmart=(newTxns)=>{
 const byMonth={};newTxns.forEach(t=>{const mk=dateToMK(t.d);if(!byMonth[mk])byMonth[mk]=[];byMonth[mk].push(t)});
 setMonths(p=>{const n={...p};Object.entries(byMonth).forEach(([mk,ts])=>{
@@ -1035,12 +1050,16 @@ const prev=HISTORY[HISTORY.length-2];
 const nw=(cur.sav+cur.ira+cur.stk+cur.jnt/2)-cur.loans;
 const nwP=(prev.sav+prev.ira+prev.stk+prev.jnt/2)-prev.loans;
 const savR=cur.inc>0?((cur.inc-cur.fix-totS)/cur.inc*100):0;
-const dim=dimOf(mo);
+const dim=dimOf(mo);const effectiveDay=mo===curMK?day:dim;
+const stepMo=(dir)=>{const p=mo.split("'");let mi=MO.indexOf(p[0]);let yr=parseInt(p[1]);
+if(dir===1){mi++;if(mi>11){mi=0;yr++}}else{mi--;if(mi<0){mi=11;yr--}}
+const nk=`${MO[mi]}'${String(yr).padStart(2,"0")}`;
+if(!months[nk])setMonths(prev=>({...prev,[nk]:{txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))}}));setMo(nk)};
 const byCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);txns.filter(t=>!t.isBill).forEach(t=>{if(m[t.cat]!==undefined)m[t.cat]+=t.amt});return m},[txns,cats]);
 const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]),MO.indexOf(p[0]),1).getDay()+6)%7},[mo]);
 
 const insights=useMemo(()=>{
-const bp=txns.reduce((mx,t)=>t.amt>mx.amt?t:mx,{amt:0,desc:"-"});const pt=(totS/Math.max(day,1))*dim;
+const bp=txns.filter(t=>!t.isBill).reduce((mx,t)=>t.amt>mx.amt?t:mx,{amt:0,desc:"-"});const pt=(totS/Math.max(effectiveDay,1))*dim;
 const ed=Math.max(0,Math.ceil((new Date(2026,7,1)-now)/86400000));
 const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${((31241-totD)/31241*100).toFixed(0)}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,`${ed} days to Europe`,`Projected: ${fmt(pt)}`],
 unhinged:[savR>20?`${savR.toFixed(1)}% savings?? Who ARE you`:`${savR.toFixed(1)}% savings. Money fleeing`,`${fmt(bp.amt)} at ${bp.desc}. In THIS economy??`,totS>totB?`Budget obliterated. ${fmt(totS-totB)} over`:`${fmt(totB-totS)} under budget. UNWELL`,`${ed} days till Europe. Wallet needs therapy`,pt>cur.inc?`Spending ${fmt(pt)}. Bank writing its will`:`Projected ${fmt(pt)} — wallet survives`],
@@ -1048,7 +1067,7 @@ dark:[`${savR.toFixed(1)}% savings. Finances outlive you`,totD>0?`${fmt(totD)} d
 therapist:[savR>15?`${savR.toFixed(1)}% saved. Proud?`:`${savR.toFixed(1)}% savings. How does that FEEL?`,`${fmt(bp.amt)} at ${bp.desc}. Need or void?`,totS>totB?`Over ${fmt(totS-totB)}. Coping mechanisms?`:`Under budget. Growth. Gold star`,`${ed} days to Europe. Running... with passport`,totD>0?`${fmt(totD)} debt. IS about money`:`Debt free! Inner child healing`],
 hype:[`${savR.toFixed(1)}% SAVINGS LET'S GOOO`,`Dropped ${fmt(bp.amt)} at ${bp.desc}?! ICONIC`,totS>totB?`${fmt(totS-totB)} over budget YOLO`:`UNDER BUDGET?! FINANCIAL WEAPON`,`${ed} DAYS TO EUROPE!! PACK NOW!!`,totD>0?`Only ${fmt(totD)} debt?! Basically RICH`:`DEBT FREE!! GET A TROPHY`]};
 const v=P[persona]||P.pro;const ic=["💰","💳","📈","✈️","🔥"];const co=[savR>15?T.success:savR>5?T.warn:T.danger,T.success,T.purple,T.info,T.warn];
-return v.map((text,i)=>({icon:ic[i],text,color:co[i]}))},[persona,savR,totS,totB,totD,txns,cur,T,day,dim]);
+return v.map((text,i)=>({icon:ic[i],text,color:co[i]}))},[persona,savR,totS,totB,totD,txns,cur,T,effectiveDay,dim]);
 
 useEffect(()=>{const iv=setInterval(()=>setInsI(i=>(i+1)%insights.length),6000);return()=>clearInterval(iv)},[insights.length]);
 
@@ -1066,7 +1085,7 @@ try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({
 setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
-case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins:insights,insI,mOff,sideIncome}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim()),card:"debit"}]);setQa("")}}}/>;
+case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
@@ -1149,11 +1168,22 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 <div><div style={{fontSize:15,fontWeight:700}}>{NAV.find(n=>n.id===tab)?.label||"Dashboard"}</div>
 <div style={{fontSize:11,color:T.textDim}}>{now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</div></div></div>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={{display:"flex",alignItems:"center",gap:4}}>
+<button onClick={()=>stepMo(-1)} style={{background:"none",border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 6px",cursor:"pointer",color:T.textMuted,display:"flex"}}><ChevronLeft size={12}/></button>
 <select value={mo} onChange={e=>setMo(e.target.value)} style={{...inpS(T),width:"auto",padding:"6px 10px",fontSize:11,fontWeight:600,borderRadius:8,cursor:"pointer",appearance:"none",paddingRight:24,backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='${encodeURIComponent(T.textDim)}' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 6px center"}}>
 {Object.keys(months).sort().map(k=><option key={k} value={k}>{k}</option>)}</select>
+<button onClick={()=>stepMo(1)} style={{background:"none",border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 6px",cursor:"pointer",color:T.textMuted,display:"flex"}}><ChevronRight size={12}/></button>
+{mo!==curMK&&<button onClick={()=>setMo(curMK)} style={{...btnS(T,false),fontSize:9,padding:"4px 8px"}}>Today</button>}
+</div>
 <button onClick={()=>setTheme(theme==="dark"?"light":"dark")} style={{background:"none",border:`1px solid ${T.border}`,borderRadius:8,padding:6,cursor:"pointer",color:T.textMuted,display:"flex"}}>{theme==="dark"?<Sun size={14}/>:<Moon size={14}/>}</button>
 <div style={{width:32,height:32,borderRadius:10,background:`linear-gradient(135deg,${accent},${T.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,cursor:"pointer"}}>{userEmojis[activeUser]||activeUser[0].toUpperCase()}</div></div></header>
-<div style={{padding:mob?14:24,maxWidth:1200}}>{renderPage()}</div></main>
+<div style={{padding:mob?14:24,maxWidth:1200}}>
+{mo!==curMK&&<div style={{padding:"8px 14px",borderRadius:10,background:T.warnBg,border:`1px solid ${T.warn}30`,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}><Clock size={14} color={T.warn}/>
+<span style={{fontSize:12,color:T.warn,fontWeight:600}}>Viewing {mo}</span>
+<span style={{fontSize:11,color:T.textMuted}}>— not current month</span></div>
+<button onClick={()=>setMo(curMK)} style={{...btnS(T,false),fontSize:10,padding:"4px 10px",borderColor:T.warn+"50",color:T.warn}}>Go to {curMK}</button></div>}
+{renderPage()}</div></main>
 
 {mob&&<nav style={{position:"fixed",bottom:0,left:0,right:0,height:60,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-around",alignItems:"center",zIndex:50,paddingBottom:"env(safe-area-inset-bottom,0)"}}>
 {[NAV[0],NAV[1],NAV[2],NAV[3],NAV[NAV.length-1]].map(item=>{const act=tab===item.id;return(
