@@ -63,6 +63,7 @@ const CHART_COLORS=["#00e5a0","#3b9eff","#ffaa2e","#ff4d6a","#a78bfa","#06d6a0"]
 const MO=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const mKey=(d=new Date())=>`${MO[d.getMonth()]}'${String(d.getFullYear()).slice(2)}`;
 const fmt=n=>{if(n==null)return"$0";const a=Math.abs(n);return(n<0?"-$":"$")+(a>=1000?a.toLocaleString("en-US",{maximumFractionDigits:0}):a.toFixed(2))};
+const billId=(prefix,desc)=>`${prefix}_${(desc||"").toLowerCase().replace(/[^a-z0-9]/g,"_")}`;
 const dimOf=mk=>{const p=mk.split("'");return new Date(2000+parseInt(p[1]),MO.indexOf(p[0])+1,0).getDate()};
 const CARD_MAP={debit:"Debit",chase:"Chase",capitalone:"CapOne",amazon:"Amazon"};
 
@@ -434,6 +435,7 @@ return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
 
 function TxnPage({T,txns,setTxns,addTxnsSmart,cats,byCat,billNames,mo,apiKey,aiModel,callAI,provider}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[cardF,setCardF]=useState("");const[showAdd,setShowAdd]=useState(false);
+const[txnView,setTxnView]=useState("date");
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
 const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResults]=useState(null);const[scanError,setScanError]=useState("");
@@ -575,6 +577,15 @@ return c&&c.budget>0?(<div style={{marginTop:8,padding:"8px 12px",background:col
 </div>):null})()}</div>}
 
 <div style={{...glass(T),padding:0,overflow:"hidden"}}>
+<div style={{padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.border}`}}>
+<div style={{display:"flex",gap:4}}>
+{[{id:"date",l:"By Date"},{id:"category",l:"By Category"},{id:"card",l:"By Card"}].map(v=>(
+<button key={v.id} onClick={()=>setTxnView(v.id)} style={{...btnS(T,txnView===v.id),fontSize:10,padding:"4px 10px"}}>{v.l}</button>))}</div>
+<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<input value={filt} onChange={e=>setFilt(e.target.value)} placeholder="Search..." style={{...inpS(T),fontSize:10,padding:"5px 10px",width:120,border:"none",background:T.bg}}/>
+{catF&&<button onClick={()=>setCatF("")} style={{...pill(T.infoBg,T.info),cursor:"pointer",border:"none",fontSize:9}}>✕ {cats.find(c=>c.id===catF)?.name}</button>}
+{cardF&&<button onClick={()=>setCardF("")} style={{...pill(T.infoBg,T.info),cursor:"pointer",border:"none",fontSize:9}}>✕ {CARD_MAP[cardF]}</button>}
+</div></div>
 <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:6,overflowX:"auto"}}>
 {cats.filter(c=>c.budget>0&&(byCat[c.id]||0)>0).sort((a,b)=>(byCat[b.id]||0)/b.budget-(byCat[a.id]||0)/a.budget).slice(0,8).map(c=>{
 const spent=byCat[c.id]||0;const pct=c.budget>0?(spent/c.budget*100):0;const col=pct>100?T.danger:pct>80?T.warn:T.success;
@@ -588,7 +599,7 @@ return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:5,padding:
 <CreditCard size={10}/>{v}
 <span style={{fontFamily:"'Space Mono',monospace",color:T.text}}>{fmt(byCard[k])}</span></button>))}</div>
 <table style={{width:"100%",borderCollapse:"collapse"}}>
-<thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
+{txnView==="date"&&<><thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
 {["Date","Description","Category","Card","Amount",""].map((h,i)=><th key={i} style={{textAlign:i===4?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
 <tbody>{filtered.length===0?<tr><td colSpan={6} style={{padding:40,textAlign:"center",color:T.textDim}}>No transactions{filt?" matching filter":""}</td></tr>:
 filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat]||0;const catBudget=cat?.budget||0;const catPct=catBudget>0?(catSpent/catBudget*100):0;const catColor=catPct>100?T.danger:catPct>80?T.warn:T.success;return(
@@ -614,7 +625,29 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat
 ):(<span onClick={()=>setEditCardId(t.id)} style={{cursor:"pointer",borderBottom:`1px dashed ${T.border}`}} title="Click to change card">{CARD_MAP[t.card]||t.card}</span>)}</td>
 <td style={{padding:"10px 14px",fontSize:13,fontWeight:700,textAlign:"right",fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(t.amt)}</td>
 <td style={{padding:"10px 14px"}}><button onClick={()=>delTxn(t.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}} title="Delete"><Trash2 size={12}/></button></td>
-</tr>)})}</tbody></table></div>
+</tr>)})}</tbody></>}
+{txnView==="category"&&<><thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
+{["Category","Count","Total","Avg","Budget","Left"].map((h,i)=><th key={i} style={{textAlign:i>=2?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
+<tbody>{cats.filter(c=>(byCat[c.id]||0)>0).sort((a,b)=>(byCat[b.id]||0)-(byCat[a.id]||0)).map(c=>{const spent=byCat[c.id]||0;const cnt=filtered.filter(t=>t.cat===c.id).length;const left=c.budget-spent;const col=left<0?T.danger:left<c.budget*.2?T.warn:T.success;
+return<tr key={c.id} style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onClick={()=>{setCatF(catF===c.id?"":c.id);setTxnView("date")}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+<td style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:16}}>{c.icon}</span><span style={{fontSize:12,fontWeight:600}}>{c.name}</span></td>
+<td style={{padding:"10px 14px",fontSize:12,color:T.textDim}}>{cnt}</td>
+<td style={{padding:"10px 14px",textAlign:"right",fontSize:13,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(spent)}</td>
+<td style={{padding:"10px 14px",textAlign:"right",fontSize:11,color:T.textDim,fontFamily:"'Space Mono',monospace"}}>{cnt>0?fmt(spent/cnt):"—"}</td>
+<td style={{padding:"10px 14px",textAlign:"right",fontSize:12,fontFamily:"'Space Mono',monospace",color:T.info}}>{c.budget>0?fmt(c.budget):"—"}</td>
+<td style={{padding:"10px 14px",textAlign:"right",fontSize:13,fontWeight:700,fontFamily:"'Space Mono',monospace",color:col}}>{c.budget>0?fmt(left):"—"}</td>
+</tr>})}</tbody></>}
+{txnView==="card"&&<><thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
+{["Card","Count","Total","Avg","% of Spending"].map((h,i)=><th key={i} style={{textAlign:i>=2?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
+<tbody>{Object.entries(CARD_MAP).filter(([k])=>(byCard[k]||0)>0).sort((a,b)=>(byCard[b[0]]||0)-(byCard[a[0]]||0)).map(([k,v])=>{const total=byCard[k]||0;const cnt=filtered.filter(t=>t.card===k).length;const allSpend=filtered.reduce((s,t)=>s+t.amt,0);const pct=allSpend>0?(total/allSpend*100):0;
+return<tr key={k} style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onClick={()=>{setCardF(cardF===k?"":k);setTxnView("date")}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+<td style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}><CreditCard size={14} color={T.info}/><span style={{fontSize:12,fontWeight:600}}>{v}</span></td>
+<td style={{padding:"10px 14px",fontSize:12,color:T.textDim}}>{cnt}</td>
+<td style={{padding:"10px 14px",textAlign:"right",fontSize:13,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(total)}</td>
+<td style={{padding:"10px 14px",textAlign:"right",fontSize:11,color:T.textDim,fontFamily:"'Space Mono',monospace"}}>{cnt>0?fmt(total/cnt):"—"}</td>
+<td style={{padding:"10px 14px",textAlign:"right"}}><div style={{display:"flex",alignItems:"center",gap:6,justifyContent:"flex-end"}}><div style={{width:60,height:4,borderRadius:2,background:T.border,overflow:"hidden"}}><div style={{width:`${Math.min(pct,100)}%`,height:"100%",borderRadius:2,background:T.info}}/></div><span style={{fontSize:11,fontWeight:600,color:T.info}}>{pct.toFixed(0)}%</span></div></td>
+</tr>})}</tbody></>}
+</table></div>
 <div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
 <span>{filtered.length} transactions</span><span>Spending: <strong style={{color:T.danger}}>{fmt(filtered.filter(t=>!t.isBill).reduce((s,t)=>s+t.amt,0))}</strong>{filtered.some(t=>t.isBill)&&<span style={{color:T.textDim}}> + Bills: <strong style={{color:T.purple}}>{fmt(filtered.filter(t=>t.isBill).reduce((s,t)=>s+t.amt,0))}</strong></span>}</span></div></div>)}
 
@@ -682,7 +715,7 @@ return(<div key={c.id} style={{padding:"14px 0",borderBottom:i<cats.length-1?`1p
 function BillsPage({T,recurring,setRecurring,subs,setSubs,billsPaid,setBillsPaid,billActuals,setBillActuals,splits,setSplits,mo,addTxnsSmart,bal,varCap,setVarCap}){
 const fixed=recurring.filter(r=>r.kind!=="variable");const variable=recurring.filter(r=>r.kind==="variable");
 const activeSubs=subs.filter(s=>s.st==="active");
-const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,idx:i,...r})),...activeSubs.map((s,i)=>({id:`s_${i}`,idx:i,desc:s.n,amt:s.a,cat:s.cat,type:"sub",kind:"fixed",group:"Subscriptions",src:"subscription",origIdx:subs.indexOf(s),due:s.due||0}))];
+const allBills=[...recurring.map((r,i)=>({id:billId("r",r.desc),idx:i,...r})),...activeSubs.map((s,i)=>({id:billId("s",s.n),idx:i,desc:s.n,amt:s.a,cat:s.cat,type:"sub",kind:"fixed",group:"Subscriptions",src:"subscription",origIdx:subs.indexOf(s),due:s.due||0}))];
 const paidSet=new Set(billsPaid[mo]||[]);const moSplits=splits[mo]||{};const moActuals=billActuals[mo]||{};
 const fixedBills=allBills.filter(b=>b.kind!=="variable");const varBills=allBills.filter(b=>b.kind==="variable");
 const fixedTotal=fixedBills.reduce((s,b)=>s+b.amt,0);const varBudget=varBills.reduce((s,b)=>s+b.amt,0);
@@ -1018,11 +1051,17 @@ return<div key={extra} style={{display:"flex",justifyContent:"space-between",ali
 
 function SplitsPage({T,recurring,subs,splits,setSplits,customSplits,setCustomSplits,recurringSplits,setRecurringSplits,mo,billsPaid,billActuals}){
 const moActuals=billActuals?.[mo]||{};
-const allBills=[...recurring.map((r,i)=>({id:`r_${i}`,desc:r.desc,amt:r.amt,cat:r.cat,type:"bill"})),
-...subs.filter(s=>s.st==="active").map((s,i)=>({id:`s_${i}`,desc:s.n,amt:s.a,cat:s.cat,type:"sub"}))];
+const allBills=[...recurring.map((r,i)=>({id:billId("r",r.desc),desc:r.desc,amt:r.amt,cat:r.cat,type:"bill"})),
+...subs.filter(s=>s.st==="active").map((s,i)=>({id:billId("s",s.n),desc:s.n,amt:s.a,cat:s.cat,type:"sub"}))];
 const moSplits=splits[mo]||{};
 const splitBills=allBills.filter(b=>moSplits[b.id]&&moSplits[b.id].confirmed);
 const getBillAmt=(b)=>moActuals[b.id]!=null?moActuals[b.id]:b.amt;
+
+// Detect orphaned splits (old index-based IDs that don't match any current bill)
+const validIds=new Set(allBills.map(b=>b.id));
+const orphanedSplits=Object.entries(moSplits).filter(([k,v])=>v.confirmed&&!validIds.has(k)&&k.startsWith("r_")).map(([k,v])=>({id:k,desc:k,pct:v.pct,date:v.date,settled:v.settled,settledDate:v.settledDate,sarahAmt:0,gregAmt:0,source:"orphan"}));
+
+const removeSplit=(bid)=>{const ms={...moSplits};delete ms[bid];setSplits(p=>({...p,[mo]:ms}))};
 
 // Custom one-off splits for this month
 const moCustom=customSplits[mo]||[];
@@ -1119,7 +1158,7 @@ const renderRow=(item,i)=>(
 {item.source==="bill"?"📋 Bill":item.source==="recurring"?"🔄 Monthly":"📌 One-off"}</span></td>
 <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(item.sarahAmt)}</td>
 <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(item.gregAmt)}</td>
-<td style={{padding:"8px 4px"}}>{item.source!=="bill"&&<button onClick={()=>removeCustom(item.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.3}}><Trash2 size={10}/></button>}</td>
+<td style={{padding:"8px 4px"}}><button onClick={()=>item.source==="bill"?removeSplit(item.id):removeCustom(item.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.3}} title="Remove split"><Trash2 size={10}/></button></td>
 </tr>);
 const headers=["","Date","Item","Type","Sarah","Greg",""].map((h,i)=><th key={i} style={{textAlign:i>=4&&i<=5?"right":"left",padding:"8px 8px",fontSize:9,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>);
 return<>
@@ -1142,6 +1181,15 @@ return<>
 <thead><tr style={{borderBottom:`2px solid ${T.success}40`}}>{headers}</tr></thead>
 <tbody>{settledItems.map(renderRow)}</tbody></table></div>}
 </>})()}
+
+{orphanedSplits.length>0&&<div style={{marginTop:14,padding:"10px 12px",background:T.dangerBg,borderRadius:8}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+<div style={{fontSize:11,fontWeight:700,color:T.danger}}>⚠️ Orphaned Splits ({orphanedSplits.length})</div>
+<button onClick={()=>{orphanedSplits.forEach(o=>removeSplit(o.id))}} style={{...btnS(T,false),fontSize:9,padding:"3px 8px",color:T.danger}}>Clear All</button></div>
+<div style={{fontSize:10,color:T.textDim,marginBottom:4}}>These splits reference bills that were renamed or removed. Delete them or re-create the bill.</div>
+{orphanedSplits.map(o=><div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10,padding:"4px 0"}}>
+<span style={{color:T.textDim}}>ID: {o.id} ({o.pct}% split)</span>
+<button onClick={()=>removeSplit(o.id)} style={{background:"none",border:"none",color:T.danger,cursor:"pointer"}}><Trash2 size={10}/></button></div>)}</div>}
 
 <div style={{borderTop:`2px solid ${T.border}`,padding:"12px 8px 0",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
 <div>{unsettled>0?<div style={{fontSize:12,color:T.warn,fontWeight:600}}>Sarah still owes {fmt(unsettled)}</div>
