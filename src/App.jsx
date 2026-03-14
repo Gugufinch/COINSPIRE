@@ -484,8 +484,11 @@ const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResul
 const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");const[csvBank,setCsvBank]=useState("chase");const[csvParsed,setCsvParsed]=useState([]);
 const[editCardId,setEditCardId]=useState(null);const[editCatId,setEditCatId]=useState(null);
 const[splitTxnId,setSplitTxnId]=useState(null);const[splitPct,setSplitPct2]=useState(50);
-const splitTxn=(t)=>{const pct=splitPct;const item={id:`c_${Date.now()}`,desc:t.desc,amt:t.amt,sarahAmt:Math.round(t.amt*pct/100*100)/100,gregAmt:Math.round(t.amt*(1-pct/100)*100)/100,pct,date:t.d,settled:false,type:"custom"};
-setCustomSplits(p=>({...p,[mo]:[...(p[mo]||[]),item]}));setSplitTxnId(null)};
+const splitTxn=(t)=>{const pct=splitPct;const item={id:`c_${Date.now()}`,txnId:t.id,desc:t.desc,amt:t.amt,sarahAmt:Math.round(t.amt*pct/100*100)/100,gregAmt:Math.round(t.amt*(1-pct/100)*100)/100,pct,date:t.d,settled:false,type:"custom"};
+setCustomSplits(p=>({...p,[mo]:[...(p[mo]||[]),item]}));
+// Mark txn with split info
+setTxns(p=>p.map(x=>x.id===t.id?{...x,splitPct:pct,splitAmt:Math.round(t.amt*(1-pct/100)*100)/100}:x));
+setSplitTxnId(null)};
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const isBillTxn=useCallback(t=>{if(t.isBill)return true;const dl=t.desc.toLowerCase();const clean=dl.replace(/ \(greg \d+%\)| \(sarah \d+%\)/i,"");if(billNames&&(billNames.has(dl)||billNames.has(clean)))return true;return false},[billNames]);
 const byCard=useMemo(()=>{const m={};txns.filter(t=>!isBillTxn(t)).forEach(t=>{m[t.card]=(m[t.card]||0)+t.amt});return m},[txns,billNames,isBillTxn]);
@@ -690,7 +693,11 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat
 <select value={t.card} onChange={e=>{setTxns(p=>p.map(x=>x.id===t.id?{...x,card:e.target.value}:x));setEditCardId(null)}} onBlur={()=>setEditCardId(null)} style={{...inpS(T),fontSize:10,padding:"3px 6px",width:"auto"}} autoFocus>
 {Object.entries(CARD_MAP).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
 ):(<span onClick={()=>setEditCardId(t.id)} style={{cursor:"pointer",borderBottom:`1px dashed ${T.border}`}} title="Click to change card">{CARD_MAP[t.card]||t.card}</span>)}</td>
-<td style={{padding:"10px 14px",fontSize:13,fontWeight:700,textAlign:"right",fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(t.amt)}</td>
+<td style={{padding:"10px 14px",fontSize:13,fontWeight:700,textAlign:"right",fontFamily:"'Space Mono',monospace",color:T.danger}}>
+{t.splitPct?(<div><div style={{fontSize:10,textDecoration:"line-through",color:T.textDim}}>{fmt(t.amt)}</div>
+<div>{fmt(t.splitAmt)}</div>
+<div style={{fontSize:8,color:T.purple}}>Split {100-t.splitPct}%</div></div>)
+:fmt(t.amt)}</td>
 <td style={{padding:"10px 14px",display:"flex",gap:2}}>
 {!t.isBill&&<button onClick={()=>setSplitTxnId(splitTxnId===t.id?null:t.id)} style={{background:splitTxnId===t.id?T.purpleBg:"none",border:splitTxnId===t.id?`1px solid ${T.purple}40`:"1px solid transparent",color:splitTxnId===t.id?T.purple:T.textMuted,cursor:"pointer",padding:"2px 5px",borderRadius:6,fontSize:11,opacity:splitTxnId===t.id?1:.5}} title="Split with Sarah">👥</button>}
 <button onClick={()=>delTxn(t.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}} title="Delete"><Trash2 size={12}/></button></td>
@@ -1568,6 +1575,138 @@ return(<div key={day} onClick={()=>setSelDay(selDay===day?null:day)} style={{pad
 </div>)}
 
 
+function OnboardingWizard({T,onComplete,userName}){
+const[step,setStep]=useState(0);
+const[inc,setInc]=useState("");
+const[fix,setFix]=useState("");
+const[bills,setBills]=useState([{desc:"",amt:"",kind:"fixed",due:""}]);
+const[varCap,setVCap]=useState("");
+const[cats,setCatsLocal]=useState([
+{id:"groceries",name:"Groceries",budget:"",icon:"🛒"},{id:"rec",name:"Fun/Dining",budget:"",icon:"🎉"},
+{id:"shop",name:"Shopping",budget:"",icon:"🛍️"},{id:"transport",name:"Transport",budget:"",icon:"🚗"},
+{id:"misc",name:"Misc",budget:"",icon:"📦"},{id:"save",name:"Savings",budget:"",icon:"💰"}]);
+const[goals,setGoals]=useState([{name:"",target:"",icon:"🎯"}]);
+
+const addBill=()=>setBills(p=>[...p,{desc:"",amt:"",kind:"fixed",due:""}]);
+const addGoal=()=>setGoals(p=>[...p,{name:"",target:"",icon:"🎯"}]);
+const addCat=()=>setCatsLocal(p=>[...p,{id:"c"+Date.now(),name:"",budget:"",icon:"📦"}]);
+
+const finish=()=>{
+const income=+inc||0;const fixed=+fix||0;const vCap=+varCap||0;
+const finalBills=bills.filter(b=>b.desc&&b.amt).map(b=>({desc:b.desc,amt:+b.amt,cat:"misc",kind:b.kind||"fixed",group:"Bills",due:+b.due||0}));
+const finalCats=cats.filter(c=>c.name).map(c=>({...c,budget:+c.budget||0}));
+const finalGoals=goals.filter(g=>g.name&&g.target).map(g=>({id:"g"+Date.now()+Math.random(),name:g.name,max:+g.target,icon:g.icon}));
+onComplete({income,fixed,varCap:vCap,bills:finalBills,cats:finalCats,goals:finalGoals})};
+
+const steps=[
+{title:"Welcome to Coinspire!",sub:`Let's set up your finances, ${userName}. This takes about 2 minutes.`},
+{title:"What's your monthly income?",sub:"After taxes \u2014 what hits your bank account each month."},
+{title:"What are your fixed bills?",sub:"Rent, subscriptions, loans \u2014 stuff that's the same every month."},
+{title:"Variable expenses",sub:"Things that change monthly \u2014 groceries, gas, electric. Set a cap for all of them."},
+{title:"Budget categories",sub:"How do you want to divide your spending money?"},
+{title:"Any savings goals?",sub:"What are you working toward?"},
+{title:"You're all set!",sub:"Let's start tracking."}
+];
+
+const canNext=()=>{
+if(step===1)return+inc>0;
+if(step===2)return true;
+if(step===3)return true;
+if(step===4)return cats.some(c=>c.name);
+if(step===5)return true;
+return true};
+
+const st={...glass(T),maxWidth:520,width:"100%",animation:"fadeUp .3s ease"};
+const hd={fontSize:24,fontWeight:800,marginBottom:6,color:T.text};
+const sub={fontSize:13,color:T.textDim,marginBottom:24};
+const row={display:"flex",gap:8,alignItems:"end",marginBottom:10};
+const navBtns=<div style={{display:"flex",gap:10,marginTop:24}}>
+{step>0&&<button onClick={()=>setStep(step-1)} style={btnS(T,false)}><ChevronLeft size={12}/>Back</button>}
+{step<steps.length-1?<button onClick={()=>canNext()&&setStep(step+1)} disabled={!canNext()} style={{...btnS(T,true),flex:1,justifyContent:"center",opacity:canNext()?1:.4}}>Continue <ChevronRight size={12}/></button>
+:<button onClick={finish} style={{...btnS(T,true),flex:1,justifyContent:"center",background:T.success}}>Launch Coinspire 🚀</button>}</div>;
+const dots=<div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:20}}>{steps.map((_,i)=><div key={i} style={{width:i===step?24:8,height:8,borderRadius:4,background:i<=step?T.success:T.border,transition:"all .3s"}}/>)}</div>;
+
+return(<div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:"'Outfit','DM Sans',-apple-system,sans-serif"}}>
+<div style={st}>
+{dots}
+<div style={hd}>{steps[step].title}</div>
+<div style={sub}>{steps[step].sub}</div>
+
+{step===0&&<div style={{textAlign:"center",padding:20}}>
+<div style={{fontSize:64,marginBottom:16}}>💰</div>
+<div style={{fontSize:14,color:T.textMuted,lineHeight:1.6}}>
+Coinspire helps you track spending, manage bills, split costs with partners, and hit your savings goals. Everything stays on your device \u2014 your data, your rules.</div></div>}
+
+{step===1&&<div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Monthly take-home pay</div>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<span style={{fontSize:20,color:T.textDim}}>$</span>
+<input type="number" value={inc} onChange={e=>setInc(e.target.value)} placeholder="0" style={{...inpS(T),fontSize:28,fontFamily:"'Space Mono',monospace",fontWeight:800,padding:"14px 16px"}} autoFocus/>
+</div>
+{+inc>0&&<div style={{marginTop:16,padding:12,background:T.successBg,borderRadius:10}}>
+<div style={{fontSize:12,color:T.success,fontWeight:600}}>✨ {fmt(+inc)}/month \u2014 let's make every dollar count</div></div>}
+</div>}
+
+{step===2&&<div>
+{bills.map((b,i)=><div key={i} style={row}>
+<div style={{flex:2}}><div style={{fontSize:9,color:T.textDim}}>Bill name</div><input value={b.desc} onChange={e=>{const n=[...bills];n[i].desc=e.target.value;setBills(n)}} placeholder="Rent, Netflix..." style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:80}}><div style={{fontSize:9,color:T.textDim}}>Amount</div><input type="number" value={b.amt} onChange={e=>{const n=[...bills];n[i].amt=e.target.value;setBills(n)}} placeholder="$" style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:50}}><div style={{fontSize:9,color:T.textDim}}>Due day</div><input type="number" value={b.due} onChange={e=>{const n=[...bills];n[i].due=e.target.value;setBills(n)}} placeholder="1" style={{...inpS(T),fontSize:12}}/></div>
+<button onClick={()=>setBills(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={14}/></button>
+</div>)}
+<button onClick={addBill} style={{...btnS(T,false),fontSize:11}}><Plus size={10}/>Add bill</button>
+{bills.filter(b=>b.amt).length>0&&<div style={{marginTop:12,fontSize:12,color:T.info}}>
+Fixed total: <strong>{fmt(bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0))}</strong>/mo
+{+inc>0&&<span> ({(bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0)/+inc*100).toFixed(0)}% of income)</span>}
+</div>}
+</div>}
+
+{step===3&&<div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Monthly cap for all variable expenses</div>
+<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+<span style={{fontSize:16,color:T.textDim}}>$</span>
+<input type="number" value={varCap} onChange={e=>setVCap(e.target.value)} placeholder="500" style={{...inpS(T),fontSize:20,fontFamily:"'Space Mono',monospace",fontWeight:700}} autoFocus/>
+</div>
+{+inc>0&&+varCap>0&&<div style={{padding:12,background:T.infoBg,borderRadius:10}}>
+<div style={{fontSize:12,color:T.info}}>After fixed bills ({fmt(bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0))}) + variable cap ({fmt(+varCap)}): <strong style={{color:T.success}}>{fmt(+inc-bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0)-(+varCap))}</strong> left for spending</div></div>}
+</div>}
+
+{step===4&&<div>
+{cats.map((c,i)=><div key={i} style={{...row,alignItems:"center"}}>
+<span style={{fontSize:20}}>{c.icon}</span>
+<div style={{flex:2}}><input value={c.name} onChange={e=>{const n=[...cats];n[i].name=e.target.value;setCatsLocal(n)}} placeholder="Category" style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:80}}><input type="number" value={c.budget} onChange={e=>{const n=[...cats];n[i].budget=e.target.value;setCatsLocal(n)}} placeholder="$0" style={{...inpS(T),fontSize:12}}/></div>
+<button onClick={()=>setCatsLocal(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={14}/></button>
+</div>)}
+<button onClick={addCat} style={{...btnS(T,false),fontSize:11}}><Plus size={10}/>Add category</button>
+{cats.some(c=>c.budget)&&<div style={{marginTop:12,fontSize:12,color:T.info}}>
+Total budgeted: <strong>{fmt(cats.reduce((s,c)=>s+(+c.budget||0),0))}</strong>
+</div>}
+</div>}
+
+{step===5&&<div>
+{goals.map((g,i)=><div key={i} style={row}>
+<span style={{fontSize:20,cursor:"pointer"}} onClick={()=>{const icons=["🎯","\u2708\uFE0F","🏠","🚗","🎓","💪","💎"];const n=[...goals];n[i].icon=icons[(icons.indexOf(g.icon)+1)%icons.length];setGoals(n)}}>{g.icon}</span>
+<div style={{flex:2}}><input value={g.name} onChange={e=>{const n=[...goals];n[i].name=e.target.value;setGoals(n)}} placeholder="Save for..." style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:90}}><input type="number" value={g.target} onChange={e=>{const n=[...goals];n[i].target=e.target.value;setGoals(n)}} placeholder="Target $" style={{...inpS(T),fontSize:12}}/></div>
+<button onClick={()=>setGoals(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={14}/></button>
+</div>)}
+<button onClick={addGoal} style={{...btnS(T,false),fontSize:11}}><Plus size={10}/>Add goal</button>
+</div>}
+
+{step===6&&<div style={{textAlign:"center",padding:20}}>
+<div style={{fontSize:64,marginBottom:16}}>🚀</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,textAlign:"left",marginBottom:16}}>
+{+inc>0&&<div style={{padding:10,background:T.successBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>INCOME</div><div style={{fontSize:16,fontWeight:700,color:T.success}}>{fmt(+inc)}</div></div>}
+{bills.filter(b=>b.amt).length>0&&<div style={{padding:10,background:T.infoBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>BILLS</div><div style={{fontSize:16,fontWeight:700,color:T.info}}>{bills.filter(b=>b.amt).length} bills</div></div>}
+{+varCap>0&&<div style={{padding:10,background:T.warnBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>VAR CAP</div><div style={{fontSize:16,fontWeight:700,color:T.warn}}>{fmt(+varCap)}</div></div>}
+{goals.filter(g=>g.name).length>0&&<div style={{padding:10,background:T.purpleBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>GOALS</div><div style={{fontSize:16,fontWeight:700,color:T.purple}}>{goals.filter(g=>g.name).length} goals</div></div>}
+</div></div>}
+
+{navBtns}
+</div></div>)}
+
+
 function PlaceholderPage({title,icon:Icon,T}){return(
 <div style={{...glass(T),textAlign:"center",padding:60}}>
 <Icon size={40} color={T.textDim} style={{marginBottom:16}}/>
@@ -1660,6 +1799,7 @@ const[splits,setSplits]=useState({});
 const[customSplits,setCustomSplits]=useState({});
 const[recurringSplits,setRecurringSplits]=useState([]);
 const[varCap,setVarCap]=useState(0);
+const[onboarded,setOnboarded]=useState(true);
 const[qa,setQa]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const savingGate=useRef(false);
@@ -1696,10 +1836,10 @@ setRecurring(isGreg?[
 {desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation",due:0}]:[]);
 setSideIncome(0);setApiKey("");setCScores([]);setUserGoals(null);setGoalContribs({});
 setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
-setPersona("pro");setAiChat([]);setTab("dash");
+setOnboarded(isGreg?true:false);setPersona("pro");setAiChat([]);setTab("dash");
 // Then load saved data on top
-const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap)}setLoaded(true);setTimeout(()=>{savingGate.current=false},100)})()},[activeUser]);
-useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap]);
+const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap);if(d.onboarded!=null)setOnboarded(d.onboarded)}setLoaded(true);setTimeout(()=>{savingGate.current=false},100)})()},[activeUser]);
+useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded]);
 
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const billNames=useMemo(()=>{const names=new Set();recurring.forEach(r=>names.add(r.desc.toLowerCase()));subs.forEach(s=>{if(s.n)names.add(s.n.toLowerCase())});return names},[recurring,subs]);
@@ -1766,6 +1906,18 @@ useEffect(()=>{if(loaded&&!months[curMK]){const prevMo=Object.keys(months).sort(
 
 if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@media(max-width:768px){table{font-size:11px!important}th,td{padding:6px 8px!important}}`}</style>
 <LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T} userEmojis={userEmojis}/></>);
+
+const handleOnboardComplete=(data)=>{
+setBal(p=>({...p,inc:data.income,fix:data.bills.reduce((s,b)=>s+b.amt,0)}));
+if(data.bills.length>0)setRecurring(data.bills);
+setVarCap(data.varCap);
+if(data.cats.length>0){const fullCats=[...data.cats,...DEFAULT_CATS.filter(dc=>!data.cats.find(c=>c.id===dc.id)).map(c=>({...c,budget:0}))];
+setMonths(p=>{const mk=Object.keys(p)[0]||curMK;return{...p,[mk]:{...p[mk],budgets:fullCats}}})}
+if(data.goals.length>0)setUserGoals(data.goals);
+setOnboarded(true)};
+
+if(authed&&!onboarded&&loaded)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+<OnboardingWizard T={T} onComplete={handleOnboardComplete} userName={getUsers().find(u=>u.id===activeUser)?.name||activeUser}/></>);
 
 const sendAI=async()=>{if(!aiMsg.trim()||!apiKey)return;const um=aiMsg.trim();setAiChat(p=>[...p,{role:"user",text:um}]);setAiMsg("");setAiLoading(true);
 const bCtx=cats.map(c=>`${c.name}:$${(byCat[c.id]||0).toFixed(0)}/$${c.budget}`).join(", ");
