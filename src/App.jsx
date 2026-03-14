@@ -1860,7 +1860,7 @@ const[varCap,setVarCap]=useState(0);
 const[onboarded,setOnboarded]=useState(true);
 const[userCards,setUserCards]=useState(CARD_MAP_DEFAULT);
 const[splitPartner,setSplitPartner]=useState("Sarah");
-const[dashWidgets,setDashWidgets]=useState({europe:true,whatsLeft:true});
+const[dashWidgets,setDashWidgets]=useState({whatsLeft:true,featuredGoal:true});
 const[undoStack,setUndoStack]=useState([]);
 const[savAccounts,setSavAccounts]=useState(null);
 const[qa,setQa]=useState("");
@@ -1897,12 +1897,22 @@ setRecurring(isGreg?[
 {desc:"Electric",amt:50,cat:"electric",kind:"variable",group:"Utilities",due:20},
 {desc:"Gas",amt:15,cat:"gas",kind:"variable",group:"Utilities",due:20},
 {desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation",due:0}]:[]);
-setSideIncome(0);setApiKey("");setCScores([]);setUserGoals(null);setGoalContribs({});
+setSideIncome(0);setApiKey("");setCScores([]);
+setUserGoals(isGreg?[{id:"europe",name:"Europe Trip",max:8000,icon:"✈️"},{id:"ira",name:"IRA Max",max:7000,icon:"📈"},{id:"emerg",name:"Emergency Fund",max:10000,icon:"🛡️"},{id:"debt",name:"Debt Free",max:6897,icon:"🏆"}]:null);
+setGoalContribs(isGreg?{europe:[{amt:2400,date:"2026-01-01",note:"Starting balance"}]}:{});
 setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
 setOnboarded(isGreg?true:false);setPersona("pro");setAiChat([]);setTab("dash");
-setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner("Partner");setDashWidgets({whatsLeft:true,featuredGoal:true});setUndoStack([]);setSavAccounts(isGreg?null:null);
+setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");setDashWidgets({whatsLeft:true,featuredGoal:true});setUndoStack([]);setSavAccounts(isGreg?null:null);
 // Then load saved data on top
-const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap);if(d.onboarded!=null)setOnboarded(d.onboarded);if(d.userCards)setUserCards(d.userCards);if(d.splitPartner)setSplitPartner(d.splitPartner);if(d.dashWidgets)setDashWidgets(d.dashWidgets);if(d.savAccounts)setSavAccounts(d.savAccounts)}setLoaded(true);setTimeout(()=>{savingGate.current=false},100)})()},[activeUser]);
+const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap);if(d.onboarded!=null)setOnboarded(d.onboarded);
+// Migration: apply new fields from saved data, or keep reset defaults
+if(d.userCards)setUserCards(d.userCards);
+if(d.splitPartner)setSplitPartner(d.splitPartner);
+if(d.dashWidgets){
+// Migrate old format: add featuredGoal if missing
+const dw={...d.dashWidgets};if(dw.featuredGoal===undefined)dw.featuredGoal=true;
+setDashWidgets(dw)}
+if(d.savAccounts)setSavAccounts(d.savAccounts)}setLoaded(true);setTimeout(()=>{savingGate.current=false},100)})()},[activeUser]);
 useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts]);
 
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
