@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
@@ -433,7 +433,7 @@ return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
 <Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
 <SpendHeatmap txns={txns.filter(t=>!t.isBill)} dim={dim} off={mOff} T={T}/></div></div>)}
 
-function TxnPage({T,txns,setTxns,addTxnsSmart,cats,byCat,billNames,mo,apiKey,aiModel,callAI,provider}){
+function TxnPage({T,txns,setTxns,addTxnsSmart,cats,byCat,billNames,mo,apiKey,aiModel,callAI,provider,customSplits,setCustomSplits}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[cardF,setCardF]=useState("");const[showAdd,setShowAdd]=useState(false);
 const[txnView,setTxnView]=useState("date");
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
@@ -441,6 +441,9 @@ const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(n
 const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResults]=useState(null);const[scanError,setScanError]=useState("");
 const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");const[csvBank,setCsvBank]=useState("chase");const[csvParsed,setCsvParsed]=useState([]);
 const[editCardId,setEditCardId]=useState(null);const[editCatId,setEditCatId]=useState(null);
+const[splitTxnId,setSplitTxnId]=useState(null);const[splitPct,setSplitPct2]=useState(50);
+const splitTxn=(t)=>{const pct=splitPct;const item={id:`c_${Date.now()}`,desc:t.desc,amt:t.amt,sarahAmt:Math.round(t.amt*pct/100*100)/100,gregAmt:Math.round(t.amt*(1-pct/100)*100)/100,pct,date:t.d,settled:false,type:"custom"};
+setCustomSplits(p=>({...p,[mo]:[...(p[mo]||[]),item]}));setSplitTxnId(null)};
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const isBillTxn=useCallback(t=>{if(t.isBill)return true;const dl=t.desc.toLowerCase();const clean=dl.replace(/ \(greg \d+%\)| \(sarah \d+%\)/i,"");if(billNames&&(billNames.has(dl)||billNames.has(clean)))return true;return false},[billNames]);
 const byCard=useMemo(()=>{const m={};txns.filter(t=>!isBillTxn(t)).forEach(t=>{m[t.card]=(m[t.card]||0)+t.amt});return m},[txns,billNames,isBillTxn]);
@@ -602,8 +605,8 @@ return(<div key={c.id} style={{display:"flex",alignItems:"center",gap:5,padding:
 {txnView==="date"&&<><thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
 {["Date","Description","Category","Card","Amount",""].map((h,i)=><th key={i} style={{textAlign:i===4?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
 <tbody>{filtered.length===0?<tr><td colSpan={6} style={{padding:40,textAlign:"center",color:T.textDim}}>No transactions{filt?" matching filter":""}</td></tr>:
-filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat]||0;const catBudget=cat?.budget||0;const catPct=catBudget>0?(catSpent/catBudget*100):0;const catColor=catPct>100?T.danger:catPct>80?T.warn:T.success;return(
-<tr key={t.id} style={{borderBottom:`1px solid ${T.border}`,transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat]||0;const catBudget=cat?.budget||0;const catPct=catBudget>0?(catSpent/catBudget*100):0;const catColor=catPct>100?T.danger:catPct>80?T.warn:T.success;return(<React.Fragment key={t.id}>
+<tr style={{borderBottom:`1px solid ${T.border}`,transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
 <td style={{padding:"10px 14px",fontSize:12,color:T.textDim}}>{t.d}</td>
 <td style={{padding:"10px 14px",fontSize:12,fontWeight:600}}>{t.desc}{t.isBill&&<span style={{...pill(T.purpleBg,T.purple),marginLeft:6,fontSize:8}}>BILL</span>}</td>
 <td style={{padding:"10px 14px"}}>
@@ -624,8 +627,19 @@ filtered.map(t=>{const cat=cats.find(c=>c.id===t.cat);const catSpent=byCat[t.cat
 {Object.entries(CARD_MAP).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>
 ):(<span onClick={()=>setEditCardId(t.id)} style={{cursor:"pointer",borderBottom:`1px dashed ${T.border}`}} title="Click to change card">{CARD_MAP[t.card]||t.card}</span>)}</td>
 <td style={{padding:"10px 14px",fontSize:13,fontWeight:700,textAlign:"right",fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(t.amt)}</td>
-<td style={{padding:"10px 14px"}}><button onClick={()=>delTxn(t.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}} title="Delete"><Trash2 size={12}/></button></td>
-</tr>)})}</tbody></>}
+<td style={{padding:"10px 14px",display:"flex",gap:2}}>
+{!t.isBill&&<button onClick={()=>setSplitTxnId(splitTxnId===t.id?null:t.id)} style={{background:splitTxnId===t.id?T.purpleBg:"none",border:splitTxnId===t.id?`1px solid ${T.purple}40`:"1px solid transparent",color:splitTxnId===t.id?T.purple:T.textMuted,cursor:"pointer",padding:"2px 5px",borderRadius:6,fontSize:11,opacity:splitTxnId===t.id?1:.5}} title="Split with Sarah">👥</button>}
+<button onClick={()=>delTxn(t.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.5}} title="Delete"><Trash2 size={12}/></button></td>
+</tr>
+{splitTxnId===t.id&&<tr><td colSpan={6} style={{padding:"8px 14px",background:T.purpleBg}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}>
+<span style={{fontSize:10,color:T.purple,fontWeight:600}}>Split with Sarah:</span>
+<input type="range" min={10} max={90} step={5} value={splitPct} onChange={e=>setSplitPct2(+e.target.value)} style={{flex:1,accentColor:T.purple}}/>
+<span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{splitPct}%</span>
+<span style={{fontSize:9,color:T.textDim}}>Sarah: {fmt(t.amt*splitPct/100)} / Greg: {fmt(t.amt*(1-splitPct/100))}</span>
+<button onClick={()=>splitTxn(t)} style={{...btnS(T,true),fontSize:9,padding:"4px 10px",background:T.purple,color:"#fff"}}><Check size={9}/>Add to Splits</button>
+<button onClick={()=>setSplitTxnId(null)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={12}/></button></div></td></tr>}
+</React.Fragment>)})}</tbody></>}
 {txnView==="category"&&<><thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
 {["Category","Count","Total","Avg","Budget","Left"].map((h,i)=><th key={i} style={{textAlign:i>=2?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
 <tbody>{cats.filter(c=>(byCat[c.id]||0)>0).sort((a,b)=>(byCat[b.id]||0)-(byCat[a.id]||0)).map(c=>{const spent=byCat[c.id]||0;const cnt=filtered.filter(t=>t.cat===c.id).length;const left=c.budget-spent;const col=left<0?T.danger:left<c.budget*.2?T.warn:T.success;
@@ -813,13 +827,13 @@ return<div style={{display:"grid",gridTemplateColumns:"50px 50px 50px 50px",gap:
 <button onClick={()=>removeBill(b)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",padding:2,opacity:.2}}><Trash2 size={10}/></button></>)}</div>
 </div>
 {/* Split slider - unconfirmed */}
-{sp&&!paid&&!sp.confirmed&&<div style={{marginLeft:34,marginTop:4,padding:"8px 10px",background:T.purpleBg,borderRadius:8,animation:"fadeUp .2s ease"}}>
+{sp&&!paid&&!sp.confirmed&&(()=>{const splitAmt=actual!=null?actual:b.amt;return<div style={{marginLeft:34,marginTop:4,padding:"8px 10px",background:T.purpleBg,borderRadius:8,animation:"fadeUp .2s ease"}}>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
 <span style={{fontSize:9,color:T.purple,fontWeight:600}}>Sarah pays:</span>
 <input type="range" min={10} max={90} step={5} value={sp.pct} onChange={e=>setSplitPct(b.id,e.target.value)} style={{flex:1,accentColor:T.purple}}/>
 <span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{sp.pct}%</span>
-<span style={{fontSize:9,color:T.textDim}}>= {fmt(b.amt*sp.pct/100)}</span></div>
-<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"4px 12px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm — Greg {fmt(b.amt*(1-sp.pct/100))} / Sarah {fmt(b.amt*sp.pct/100)}</button></div>}
+<span style={{fontSize:9,color:T.textDim}}>= {fmt(splitAmt*sp.pct/100)}{isVar&&actual!=null&&` of ${fmt(splitAmt)} bill`}</span></div>
+<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"4px 12px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm — Greg {fmt(splitAmt*(1-sp.pct/100))} / Sarah {fmt(splitAmt*sp.pct/100)}</button></div>})()}
 {/* Split confirmed badge */}
 {sp&&sp.confirmed&&!paid&&<div style={{marginLeft:34,marginTop:3,display:"flex",gap:6,alignItems:"center"}}>
 <span style={pill(T.successBg,T.success)}>✓ Split {sp.pct}% confirmed</span>
@@ -1575,7 +1589,30 @@ return data.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
 throw new Error("Unknown provider: "+p)};
 const[calMo,setCalMo]=useState(new Date().getMonth());const[calYr,setCalYr]=useState(new Date().getFullYear());
 const[keySaved,setKeySaved]=useState(false);
-const[recurring,setRecurring]=useState([
+const[recurring,setRecurring]=useState([]);
+const[billsPaid,setBillsPaid]=useState({});
+const[billActuals,setBillActuals]=useState({});
+const[splits,setSplits]=useState({});
+const[customSplits,setCustomSplits]=useState({});
+const[recurringSplits,setRecurringSplits]=useState([]);
+const[varCap,setVarCap]=useState(0);
+const[qa,setQa]=useState("");
+const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
+const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
+
+useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("resize",h);if(window.innerWidth<900)setSideOpen(false);return()=>window.removeEventListener("resize",h)},[]);
+const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
+
+// Load/Save
+const FRESH_BAL={sav:0,ira:0,stk:0,jnt:0,inc:0,fix:0};
+const GREG_BAL={sav:313,ira:3194,stk:1376,jnt:49966,inc:5656,fix:1780};
+useEffect(()=>{setLoaded(false);(async()=>{
+// Reset to clean defaults first
+const isGreg=activeUser==="greg";
+setMonths({[curMK]:{txns:isGreg?SAMPLE_TXNS:[],budgets:DEFAULT_CATS.map(c=>({...c}))}});
+setMo(curMK);setBal(isGreg?GREG_BAL:{...FRESH_BAL});
+setDebts(isGreg?DEBTS_DEFAULT:[]);setSubs(isGreg?SUBS_DEFAULT:[]);
+setRecurring(isGreg?[
 {desc:"Rent",amt:1200,cat:"misc",kind:"fixed",group:"Housing",due:1},
 {desc:"Insurance",amt:10,cat:"misc",kind:"fixed",group:"Housing",due:1},
 {desc:"BCU Loan",amt:345,cat:"loan",kind:"fixed",group:"Loans",due:18},
@@ -1591,22 +1628,12 @@ const[recurring,setRecurring]=useState([
 {desc:"Groceries",amt:500,cat:"groceries",kind:"variable",group:"Groceries",due:0},
 {desc:"Electric",amt:50,cat:"electric",kind:"variable",group:"Utilities",due:20},
 {desc:"Gas",amt:15,cat:"gas",kind:"variable",group:"Utilities",due:20},
-{desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation",due:0}]);
-const[billsPaid,setBillsPaid]=useState({});
-const[billActuals,setBillActuals]=useState({});
-const[splits,setSplits]=useState({});
-const[customSplits,setCustomSplits]=useState({});
-const[recurringSplits,setRecurringSplits]=useState([]);
-const[varCap,setVarCap]=useState(690);
-const[qa,setQa]=useState("");
-const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
-const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
-
-useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("resize",h);if(window.innerWidth<900)setSideOpen(false);return()=>window.removeEventListener("resize",h)},[]);
-const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
-
-// Load/Save
-useEffect(()=>{(async()=>{const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap)}setLoaded(true)})()},[activeUser]);
+{desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation",due:0}]:[]);
+setSideIncome(0);setApiKey("");setCScores([]);setUserGoals(null);setGoalContribs({});
+setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
+setPersona("pro");setAiChat([]);setTab("dash");
+// Then load saved data on top
+const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap)}setLoaded(true)})()},[activeUser]);
 useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap]);
 
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
@@ -1684,7 +1711,7 @@ setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(
 
 const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills}} qa={qa} setQa={setQa} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
-case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider}/>;
+case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider} customSplits={customSplits} setCustomSplits={setCustomSplits}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} setBal={setBal} cur={cur}/>;
