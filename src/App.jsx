@@ -156,7 +156,9 @@ pro:{name:"Professional",icon:"📊"},unhinged:{name:"Unhinged",icon:"🔥"},
 dark:{name:"Dark Humor",icon:"💀"},therapist:{name:"Therapist",icon:"🧠"},
 hype:{name:"Hype Beast",icon:"🎭"}};
 
-const USERS=[{id:"greg",name:"Greg",icon:"🎸"},{id:"sarah",name:"Sarah",icon:"🌸"}];
+// Dynamic user list stored in localStorage/Supabase
+const getUsers=()=>{try{const d=localStorage.getItem("coinspire_users");return d?JSON.parse(d):[{id:"greg",name:"Greg",icon:"🎸"}]}catch{return[{id:"greg",name:"Greg",icon:"🎸"}]}};
+const saveUsers=(users)=>{try{localStorage.setItem("coinspire_users",JSON.stringify(users))}catch{}};
 
 const AI_PROVIDERS={
 anthropic:{name:"Claude (Anthropic)",vision:true,models:[{id:"claude-sonnet-4-20250514",name:"Sonnet 4 (fast)"},{id:"claude-opus-4-20250514",name:"Opus 4 (smartest)"},{id:"claude-haiku-4-5-20251001",name:"Haiku 4.5 (cheapest)"}],placeholder:"sk-ant-..."},
@@ -198,11 +200,26 @@ function Confetti({show}){if(!show)return null;return(<div style={{position:"fix
 // LOGIN SCREEN
 // ═══════════════════════════════════════════════════
 function LoginScreen({onLogin,T,userEmojis}){
+const[users,setUsersLocal]=useState(getUsers());
 const[user,setUser]=useState(null);
 const[pin,setPin]=useState("");
 const[showPin,setShowPin]=useState(false);
 const[error,setError]=useState(false);
 const[setupMode,setSetupMode]=useState(false);
+const[createMode,setCreateMode]=useState(false);
+const[newName,setNewName]=useState("");
+const[newEmoji,setNewEmoji]=useState("💰");
+const emojis=["💰","🎸","🌸","🚀","⭐","🔥","💪","🎯","🌟","💎","🌊","🌿"];
+
+const createUser=()=>{if(!newName.trim())return;
+const id=newName.trim().toLowerCase().replace(/[^a-z0-9]/g,"_");
+if(users.find(u=>u.id===id))return;
+const updated=[...users,{id,name:newName.trim(),icon:newEmoji}];
+setUsersLocal(updated);saveUsers(updated);setUser(id);setCreateMode(false);setSetupMode(true);setPin("")};
+
+const deleteUser=(uid)=>{if(uid==="greg")return;
+const updated=users.filter(u=>u.id!==uid);setUsersLocal(updated);saveUsers(updated);
+try{localStorage.removeItem("coinspire_"+uid);localStorage.removeItem("coinspire_pin_"+uid)}catch{}};
 
 const handleSubmit=async()=>{
   if(setupMode){if(pin.length>=4){
@@ -218,34 +235,57 @@ const handleSubmit=async()=>{
 
 return(
 <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Outfit','DM Sans',-apple-system,sans-serif"}}>
-<div style={{textAlign:"center",maxWidth:380,width:"100%",padding:20}}>
+<div style={{textAlign:"center",maxWidth:440,width:"100%",padding:20}}>
   <img src={LOGO} alt="Coinspire" style={{width:120,height:120,marginBottom:8,filter:"drop-shadow(0 8px 24px rgba(0,229,160,.2))"}}/>
   <h1 style={{fontSize:32,fontWeight:900,color:T.text,marginBottom:4,letterSpacing:-1}}>Coinspire</h1>
   <p style={{color:T.textDim,fontSize:13,marginBottom:32}}>Your money, your rules</p>
 
-  {!user?(
+  {createMode?(
+    <div style={{animation:"fadeUp .3s ease"}}>
+      <p style={{color:T.textMuted,fontSize:13,marginBottom:16}}>Create your account</p>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center",marginBottom:16}}>
+        {emojis.map(e=><button key={e} onClick={()=>setNewEmoji(e)} style={{fontSize:24,background:newEmoji===e?T.successBg:"transparent",border:`2px solid ${newEmoji===e?T.success:T.border}`,borderRadius:10,padding:"6px 8px",cursor:"pointer"}}>{e}</button>)}</div>
+      <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&createUser()} placeholder="Your name" style={{...inpS(T),textAlign:"center",fontSize:18,fontWeight:600,marginBottom:16}}/>
+      <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+        <button onClick={()=>setCreateMode(false)} style={btnS(T,false)}><ChevronLeft size={12}/>Back</button>
+        <button onClick={createUser} disabled={!newName.trim()} style={{...btnS(T,true),opacity:newName.trim()?1:.5}}><Plus size={12}/>Create Account</button></div>
+    </div>
+  ):!user?(
     <div>
       <p style={{color:T.textMuted,fontSize:12,marginBottom:16}}>Who's counting coins?</p>
-      <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-        {USERS.map(u=>(
-          <button key={u.id} onClick={()=>setUser(u.id)} style={{
+      <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+        {users.map(u=>(
+          <div key={u.id} style={{position:"relative"}}>
+          <button onClick={()=>setUser(u.id)} style={{
             padding:"20px 32px",borderRadius:16,border:`2px solid ${T.border}`,
             background:T.card,cursor:"pointer",transition:"all .2s",
-            display:"flex",flexDirection:"column",alignItems:"center",gap:8,
+            display:"flex",flexDirection:"column",alignItems:"center",gap:8,minWidth:100,
           }}
           onMouseEnter={e=>{e.currentTarget.style.borderColor=T.success;e.currentTarget.style.transform="translateY(-2px)"}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.transform="translateY(0)"}}>
             <span style={{fontSize:36}}>{userEmojis?.[u.id]||u.icon}</span>
             <span style={{fontSize:15,fontWeight:700,color:T.text}}>{u.name}</span>
           </button>
+          {u.id!=="greg"&&<button onClick={(e)=>{e.stopPropagation();if(confirm("Delete "+u.name+"? All data will be lost."))deleteUser(u.id)}} style={{position:"absolute",top:-6,right:-6,width:22,height:22,borderRadius:"50%",background:T.danger,border:"none",color:"#fff",fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>✕</button>}
+          </div>
         ))}
+        <button onClick={()=>setCreateMode(true)} style={{
+          padding:"20px 32px",borderRadius:16,border:`2px dashed ${T.border}`,
+          background:"transparent",cursor:"pointer",transition:"all .2s",
+          display:"flex",flexDirection:"column",alignItems:"center",gap:8,minWidth:100,
+        }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.success}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border}}>
+          <Plus size={28} color={T.textDim}/>
+          <span style={{fontSize:13,fontWeight:600,color:T.textDim}}>New User</span>
+        </button>
       </div>
     </div>
   ):(
     <div style={{animation:"fadeUp .3s ease"}}>
-      <div style={{fontSize:48,marginBottom:8}}>{userEmojis?.[user]||USERS.find(u2=>u2.id===user)?.icon}</div>
+      <div style={{fontSize:48,marginBottom:8}}>{userEmojis?.[user]||users.find(u2=>u2.id===user)?.icon||"💰"}</div>
       <p style={{color:T.textMuted,fontSize:13,marginBottom:16}}>
-        {setupMode?"Create a PIN for "+USERS.find(u2=>u2.id===user)?.name:"Enter your PIN"}
+        {setupMode?"Create a PIN for "+(users.find(u2=>u2.id===user)?.name||user):"Enter your PIN"}
       </p>
       <div style={{position:"relative",marginBottom:16}}>
         <input type={showPin?"text":"password"} value={pin} onChange={e=>setPin(e.target.value)}
@@ -270,7 +310,7 @@ return(
   )}
 </div></div>)}
 
-// ═══════════════════════════════════════════════════
+
 // VELOCITY GAUGE
 // ═══════════════════════════════════════════════════
 function VelocityGauge({spent,budget,day,dim,T}){
@@ -470,16 +510,26 @@ try{const text=await callAI({system:"You extract transactions from images. Retur
 if(!text){setScanError("Empty response — check your credits or API key");setScanLoading(false);return}
 const clean=text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim();
 try{
-// Fix common AI JSON issues: escaped quotes in strings, trailing commas
+// Step 1: Try parsing as-is (handles valid JSON with escaped quotes)
+let parsed;
+try{parsed=JSON.parse(clean)}catch{
+// Step 2: Extract array, repair truncation
 let fixed=clean;
-// Extract just the array if there's extra text around it
-const arrMatch=fixed.match(/\[[\s\S]*\]/);
-if(arrMatch)fixed=arrMatch[0];
-// Fix escaped quotes that break JSON (e.g. 8\" becomes 8 inch)
-fixed=fixed.replace(/(\w)\\"/g,'$1 inch').replace(/\\"/g,'"');
-// Remove trailing commas before ] or }
-fixed=fixed.replace(/,\s*([}\]])/g,'$1');
-const parsed=JSON.parse(fixed);
+const arrStart=fixed.indexOf("[");
+if(arrStart>=0)fixed=fixed.slice(arrStart);
+// Remove trailing commas
+fixed=fixed.replace(/,\s*([}\]])/g,"$1");
+// If truncated mid-string, close it
+if(!fixed.endsWith("]")){
+const lastComplete=fixed.lastIndexOf("}");
+if(lastComplete>0)fixed=fixed.slice(0,lastComplete+1)+"]";
+else fixed="[]"}
+try{parsed=JSON.parse(fixed)}catch{
+// Step 3: Nuclear option — extract individual objects with regex
+const items=[];const re=/\{[^{}]*"desc"\s*:\s*"[^"]*"[^{}]*\}/g;let m2;
+while((m2=re.exec(clean))!==null){try{items.push(JSON.parse(m2[0]))}catch{}}
+parsed=items.length>0?items:null}}
+if(!parsed)throw new Error("Could not parse");
 if(Array.isArray(parsed)&&parsed.length>0){setScanResults(parsed.map((t,i)=>({...t,id:Date.now()+i,card:"debit",selected:true})))}
 else{setScanError("No transactions found in image")}}
 catch(pe){setScanError("AI returned non-JSON. Response: "+clean.slice(0,200))}
@@ -1772,8 +1822,8 @@ case"settings":return(
 <button onClick={()=>setTab("sub")} style={btnS(T,false)}>📋 Manage on Bills page</button></div>
 <div><div style={lbl(T)}>Account</div>
 <div style={{display:"flex",alignItems:"center",gap:12}}>
-<span style={{fontSize:24}}>{userEmojis[activeUser]||USERS.find(u=>u.id===activeUser)?.icon}</span>
-<span style={{fontWeight:600}}>{USERS.find(u=>u.id===activeUser)?.name}</span>
+<span style={{fontSize:24}}>{userEmojis[activeUser]||getUsers().find(u=>u.id===activeUser)?.icon||"💰"}</span>
+<span style={{fontWeight:600}}>{getUsers().find(u=>u.id===activeUser)?.name||activeUser}</span>
 <button onClick={()=>{if(confirm("Reset ALL data for "+activeUser+"? This cannot be undone.")){savingGate.current=false;svData(null,activeUser);setLoaded(false);savingGate.current=true;setAuthed(false)}}} style={{...btnS(T,false),color:T.danger}}><Trash2 size={12}/>Reset Account</button>
 <button onClick={()=>{savingGate.current=true;setAuthed(false);setLoaded(false)}} style={{...btnS(T,false),marginLeft:"auto"}}><Lock size={12}/>Lock</button></div></div></div>);
 default:return<PlaceholderPage title="Page" icon={Home} T={T}/>}};
