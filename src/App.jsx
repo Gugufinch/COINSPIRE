@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
@@ -22,6 +22,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 const svData = async (data, u = "greg") => {
+  if(!data){if(!supabase){try{localStorage.removeItem("coinspire_"+u)}catch{}}else{try{await supabase.from("user_data").delete().eq("user_id",u)}catch{}}return}
   if (!supabase) { try { localStorage.setItem("coinspire_" + u, JSON.stringify(data)); } catch(e) { console.error(e); } return; }
   try { await supabase.from("user_data").upsert({ user_id: u, data, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); } catch(e) { console.error(e); }
 };
@@ -468,7 +469,17 @@ const prompt=`Extract ALL transactions from this image. For each transaction, de
 try{const text=await callAI({system:"You extract transactions from images. Return ONLY valid JSON arrays.",messages:[{role:"user",content:prompt,image:scanImg}],maxTokens:2000});
 if(!text){setScanError("Empty response — check your credits or API key");setScanLoading(false);return}
 const clean=text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim();
-try{const parsed=JSON.parse(clean);
+try{
+// Fix common AI JSON issues: escaped quotes in strings, trailing commas
+let fixed=clean;
+// Extract just the array if there's extra text around it
+const arrMatch=fixed.match(/\[[\s\S]*\]/);
+if(arrMatch)fixed=arrMatch[0];
+// Fix escaped quotes that break JSON (e.g. 8\" becomes 8 inch)
+fixed=fixed.replace(/(\w)\\"/g,'$1 inch').replace(/\\"/g,'"');
+// Remove trailing commas before ] or }
+fixed=fixed.replace(/,\s*([}\]])/g,'$1');
+const parsed=JSON.parse(fixed);
 if(Array.isArray(parsed)&&parsed.length>0){setScanResults(parsed.map((t,i)=>({...t,id:Date.now()+i,card:"debit",selected:true})))}
 else{setScanError("No transactions found in image")}}
 catch(pe){setScanError("AI returned non-JSON. Response: "+clean.slice(0,200))}
@@ -1598,6 +1609,7 @@ const[recurringSplits,setRecurringSplits]=useState([]);
 const[varCap,setVarCap]=useState(0);
 const[qa,setQa]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
+const savingGate=useRef(false);
 const[winW,setWinW]=useState(typeof window!=="undefined"?window.innerWidth:1200);
 
 useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener("resize",h);if(window.innerWidth<900)setSideOpen(false);return()=>window.removeEventListener("resize",h)},[]);
@@ -1606,7 +1618,7 @@ const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 // Load/Save
 const FRESH_BAL={sav:0,ira:0,stk:0,jnt:0,inc:0,fix:0};
 const GREG_BAL={sav:313,ira:3194,stk:1376,jnt:49966,inc:5656,fix:1780};
-useEffect(()=>{setLoaded(false);(async()=>{
+useEffect(()=>{savingGate.current=true;setLoaded(false);(async()=>{
 // Reset to clean defaults first
 const isGreg=activeUser==="greg";
 setMonths({[curMK]:{txns:isGreg?SAMPLE_TXNS:[],budgets:DEFAULT_CATS.map(c=>({...c}))}});
@@ -1633,8 +1645,8 @@ setSideIncome(0);setApiKey("");setCScores([]);setUserGoals(null);setGoalContribs
 setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
 setPersona("pro");setAiChat([]);setTab("dash");
 // Then load saved data on top
-const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap)}setLoaded(true)})()},[activeUser]);
-useEffect(()=>{if(loaded)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap]);
+const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap)}setLoaded(true);setTimeout(()=>{savingGate.current=false},100)})()},[activeUser]);
+useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap]);
 
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const billNames=useMemo(()=>{const names=new Set();recurring.forEach(r=>names.add(r.desc.toLowerCase()));subs.forEach(s=>{if(s.n)names.add(s.n.toLowerCase())});return names},[recurring,subs]);
@@ -1762,7 +1774,8 @@ case"settings":return(
 <div style={{display:"flex",alignItems:"center",gap:12}}>
 <span style={{fontSize:24}}>{userEmojis[activeUser]||USERS.find(u=>u.id===activeUser)?.icon}</span>
 <span style={{fontWeight:600}}>{USERS.find(u=>u.id===activeUser)?.name}</span>
-<button onClick={()=>{setAuthed(false);setLoaded(false)}} style={{...btnS(T,false),marginLeft:"auto"}}><Lock size={12}/>Lock</button></div></div></div>);
+<button onClick={()=>{if(confirm("Reset ALL data for "+activeUser+"? This cannot be undone.")){savingGate.current=false;svData(null,activeUser);setLoaded(false);savingGate.current=true;setAuthed(false)}}} style={{...btnS(T,false),color:T.danger}}><Trash2 size={12}/>Reset Account</button>
+<button onClick={()=>{savingGate.current=true;setAuthed(false);setLoaded(false)}} style={{...btnS(T,false),marginLeft:"auto"}}><Lock size={12}/>Lock</button></div></div></div>);
 default:return<PlaceholderPage title="Page" icon={Home} T={T}/>}};
 
 const sW=mob?0:(sideOpen?230:64);
