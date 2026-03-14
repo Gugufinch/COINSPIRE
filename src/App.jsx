@@ -100,6 +100,7 @@ const DEFAULT_CATS=[
 {id:"travel",name:"Travel",budget:400,icon:"✈️"},
 {id:"ira",name:"Roth IRA",budget:200,icon:"📈"},
 {id:"loan",name:"Extra Loan",budget:1057,icon:"💳"}];
+const BLANK_CATS=DEFAULT_CATS.map(c=>({...c,budget:0}));
 
 const AUTO_CAT_MAP={marianos:"groceries",target:"shop",walgreens:"shop",uber:"transport",lyft:"transport",ventra:"transport",starbucks:"rec",amazon:"shop",costco:"groceries",aldi:"groceries",trader:"groceries",whole:"groceries",jewel:"groceries",restaurant:"rec",bar:"rec",coffee:"rec",gas:"gas",shell:"gas",electric:"electric",comed:"electric",salon:"misc",cvs:"shop",
 michaels:"shop",marshalls:"shop",marshals:"shop",walmart:"shop",dollar:"shop",bath:"shop",
@@ -505,8 +506,8 @@ const scanImage=async()=>{if(!scanImg){setScanError("No image selected");return}
 if(!apiKey){setScanError("Set your API key in Settings first");return}
 setScanLoading(true);setScanError("");setScanResults(null);
 const catList=cats.map(c=>`${c.id}: ${c.name}`).join(", ");
-const prompt=`Extract ALL transactions from this image. For each transaction, determine the best category from: ${catList}.\n\nReturn ONLY a JSON array with no other text, no markdown, no backticks. Each item: {"date":"YYYY-MM-DD","desc":"description","amt":number,"cat":"category_id"}\n\nRules:\n- amt should always be positive\n- Use the most specific category that fits\n- If you can't determine the date, use today: ${new Date().toISOString().split("T")[0]}\n- Clean up merchant names (remove transaction IDs, card numbers etc)\n- If it's a receipt, extract individual line items if visible, otherwise use the total`;
-try{const text=await callAI({system:"You extract transactions from images. Return ONLY valid JSON arrays.",messages:[{role:"user",content:prompt,image:scanImg}],maxTokens:2000});
+const prompt=`Extract ALL transactions/purchases from this image. For each, determine the best category from: ${catList}.\n\nReturn ONLY a JSON array. Each item: {"date":"YYYY-MM-DD","desc":"short name","amt":number,"cat":"category_id"}\n\nIMPORTANT:\n- Use SHORT simple descriptions (max 30 chars). "Bamboo Plant Stakes" not the full Amazon title\n- amt must be positive numbers\n- If you see a single order total, return ONE transaction with that total\n- If individual line items with prices are visible, return each\n- Today is ${new Date().toISOString().split("T")[0]}\n- No markdown, no backticks, ONLY the JSON array`;
+try{const text=await callAI({system:"You extract transactions from images. Return ONLY a valid JSON array with short descriptions. Never use quotes or special characters inside description strings.",messages:[{role:"user",content:prompt,image:scanImg}],maxTokens:3000});
 if(!text){setScanError("Empty response — check your credits or API key");setScanLoading(false);return}
 const clean=text.replace(/```json\s*/g,"").replace(/```\s*/g,"").trim();
 try{
@@ -526,8 +527,10 @@ if(lastComplete>0)fixed=fixed.slice(0,lastComplete+1)+"]";
 else fixed="[]"}
 try{parsed=JSON.parse(fixed)}catch{
 // Step 3: Nuclear option — extract individual objects with regex
-const items=[];const re=/\{[^{}]*"desc"\s*:\s*"[^"]*"[^{}]*\}/g;let m2;
-while((m2=re.exec(clean))!==null){try{items.push(JSON.parse(m2[0]))}catch{}}
+const items=[];const re=/\{[^{}]{5,300}\}/g;let m2;
+while((m2=re.exec(clean))!==null){try{const obj=JSON.parse(m2[0]);if(obj.desc&&obj.amt)items.push(obj)}catch{
+// Try fixing the individual object
+try{const f2=m2[0].replace(/\\"/g,"'").replace(/,\s*\}/,"}");const obj2=JSON.parse(f2);if(obj2.desc&&obj2.amt)items.push(obj2)}catch{}}}
 parsed=items.length>0?items:null}}
 if(!parsed)throw new Error("Could not parse");
 if(Array.isArray(parsed)&&parsed.length>0){setScanResults(parsed.map((t,i)=>({...t,id:Date.now()+i,card:"debit",selected:true})))}
@@ -1671,7 +1674,7 @@ const GREG_BAL={sav:313,ira:3194,stk:1376,jnt:49966,inc:5656,fix:1780};
 useEffect(()=>{savingGate.current=true;setLoaded(false);(async()=>{
 // Reset to clean defaults first
 const isGreg=activeUser==="greg";
-setMonths({[curMK]:{txns:isGreg?SAMPLE_TXNS:[],budgets:DEFAULT_CATS.map(c=>({...c}))}});
+setMonths({[curMK]:{txns:isGreg?SAMPLE_TXNS:[],budgets:(isGreg?DEFAULT_CATS:BLANK_CATS).map(c=>({...c}))}});
 setMo(curMK);setBal(isGreg?GREG_BAL:{...FRESH_BAL});
 setDebts(isGreg?DEBTS_DEFAULT:[]);setSubs(isGreg?SUBS_DEFAULT:[]);
 setRecurring(isGreg?[
@@ -1738,7 +1741,7 @@ const dim=dimOf(mo);const effectiveDay=mo===curMK?day:dim;
 const stepMo=(dir)=>{const p=mo.split("'");let mi=MO.indexOf(p[0]);let yr=parseInt(p[1]);
 if(dir===1){mi++;if(mi>11){mi=0;yr++}}else{mi--;if(mi<0){mi=11;yr--}}
 const nk=`${MO[mi]}'${String(yr).padStart(2,"0")}`;
-if(!months[nk]){setMonths(prev=>({...prev,[nk]:{txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))}}));
+if(!months[nk]){const prevBudgets=months[mo]?.budgets||DEFAULT_CATS;setMonths(prev=>({...prev,[nk]:{txns:[],budgets:prevBudgets.map(c=>({...c}))}}));
 // Auto-seed recurring splits for new month
 if(recurringSplits.length>0){const rc=recurringSplits.map(r=>({id:`rec_${r.id}_${nk}`,recurId:r.id,desc:r.desc,amt:r.amt,sarahAmt:r.amt*((r.pct||50)/100),gregAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}));
 setCustomSplits(p=>({...p,[nk]:[...(p[nk]||[]),...rc.filter(r=>!(p[nk]||[]).find(c=>c.recurId===r.recurId))]}))}}setMo(nk)};
@@ -1759,7 +1762,7 @@ return v.map((text,i)=>({icon:ic[i],text,color:co[i]}))},[persona,savR,totS,totB
 useEffect(()=>{const iv=setInterval(()=>setInsI(i=>(i+1)%insights.length),6000);return()=>clearInterval(iv)},[insights.length]);
 
 // Auto-create current month if missing
-useEffect(()=>{if(loaded&&!months[curMK]){setMonths(p=>({...p,[curMK]:{txns:[],budgets:DEFAULT_CATS.map(c=>({...c}))}}))}},[ loaded]);
+useEffect(()=>{if(loaded&&!months[curMK]){const prevMo=Object.keys(months).sort().pop();const cats=months[prevMo]?.budgets||(activeUser==="greg"?DEFAULT_CATS:BLANK_CATS);setMonths(p=>({...p,[curMK]:{txns:[],budgets:cats.map(c=>({...c}))}}))}},[loaded]);
 
 if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@media(max-width:768px){table{font-size:11px!important}th,td{padding:6px 8px!important}}`}</style>
 <LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T} userEmojis={userEmojis}/></>);
