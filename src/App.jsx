@@ -2114,8 +2114,9 @@ if(authed&&!onboarded&&loaded)return(<><style>{`@import url('https://fonts.googl
 const sendAI=async()=>{if(!aiMsg.trim()||!apiKey)return;const um=aiMsg.trim();setAiChat(p=>[...p,{role:"user",text:um}]);setAiMsg("");setAiLoading(true);
 const bCtx=cats.map(c=>`${c.name}:$${(byCat[c.id]||0).toFixed(0)}/$${c.budget}`).join(", ");
 const pPr={pro:"Professional financial advisor.",unhinged:"UNHINGED financial advisor. Roast spending. Caps lock. Drag them.",dark:"Financial advisor with dark humor. Deadpan gallows comedy.",therapist:"Financial therapist. Passive-aggressive.",hype:"HYPE BEAST advisor. Celebrate everything."};
-const sys=`${pPr[persona]||pPr.pro} Advisor for Greg, 33, Chicago. Direct, specific. Under 200 words.\nIncome $${cur.inc}/mo | Fixed $${cur.fix} | Budget: ${bCtx} | Spent $${totS.toFixed(0)}/$${totB}\nDEBT: $${totD} | ASSETS: Sav $${cur.sav} | IRA $${cur.ira} | Stk $${cur.stk} | Joint $${cur.jnt} | NW $${nw.toFixed(0)}\nSavings rate ${savR.toFixed(1)}%`;
-try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}]});
+const userName=getUsers().find(u=>u.id===activeUser)?.name||activeUser;
+const sys=`${pPr[persona]||pPr.pro} Financial advisor for ${userName}. Direct, specific. Under 200 words.\nIncome $${cur.inc}/mo | Fixed $${cur.fix} | Budget: ${bCtx} | Spent $${totS.toFixed(0)}/$${totB}\nDEBT: $${totD} | ASSETS: Sav $${cur.sav} | IRA $${cur.ira} | Stk $${cur.stk} | Joint $${cur.jnt} | NW $${nw.toFixed(0)}\nSavings rate ${savR.toFixed(1)}%`;
+try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:um}],maxTokens:2000});
 setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
