@@ -410,28 +410,39 @@ return(<div style={glass(T)}><div style={lbl(T)}>Daily Spending</div>
 // ═══════════════════════════════════════════════════
 // PAGES
 // ═══════════════════════════════════════════════════
-function DashPage({T,accent,data,qa,setQa,addQA,undoStack,undo}){
+function DashPage({T,accent,data,qa,setQa,addQA,undoStack,undo,setDashWidgets}){
 const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc,debts,dashWidgets,userGoals,goalContribs,history}=data;
 const nwC=nwP!==0?((nw-nwP)/Math.abs(nwP)*100):0;
 const dC=prev.loans>0?((totD-prev.loans)/prev.loans*100):0;
 const totalSav=cur.sav+cur.ira+cur.stk+(cur.jnt);
 const avgBurn=history.length?history.slice(-6).reduce((s,h)=>s+h.spend+h.fix,0)/Math.min(history.length,6):0;
-return(<div>
-<div style={{...glass(T),marginBottom:14,display:"flex",gap:8,alignItems:"center"}}>
-<span style={{fontSize:16,color:T.textDim}}>$</span>
-<input value={qa} onChange={e=>setQa(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addQA()}
-placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),border:"none",background:"transparent",fontSize:13,flex:1,padding:"8px 0"}}/>
-<button onClick={addQA} disabled={!qa.trim()} style={{...btnS(T,true),opacity:qa.trim()?1:.4}}><Plus size={12}/>Add</button>
-{undoStack&&undoStack.length>0&&<button onClick={undo} style={{...btnS(T,false),fontSize:10}} title="Undo last delete">↩ Undo</button>}</div>
-<InsightBar insights={ins} idx={insI} T={T}/>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14,marginTop:14}}>
+const[customizing,setCustomizing]=useState(false);
+
+// Widget config
+const DEFAULT_ORDER=["stats","whatsLeft","featuredGoal","velocity","runway","freedom","streaks","nwTrend","heatmap"];
+const WIDGET_META={stats:{name:"Stats Overview",icon:"📊"},whatsLeft:{name:"What's Left",icon:"💵"},featuredGoal:{name:"Featured Goal",icon:"🎯"},velocity:{name:"Spending Velocity",icon:"⚡"},runway:{name:"Post-Exit Runway",icon:"🛫"},freedom:{name:"Freedom Countdown",icon:"🗓️"},streaks:{name:"Streaks & Wins",icon:"🔥"},nwTrend:{name:"Net Worth Trend",icon:"📈"},heatmap:{name:"Spending Heatmap",icon:"🗓️"}};
+const order=dashWidgets?.order||DEFAULT_ORDER;
+const hidden=dashWidgets?.hidden||[];
+const isVisible=id=>!hidden.includes(id);
+const toggleWidget=id=>{const h=[...hidden];const idx=h.indexOf(id);idx>=0?h.splice(idx,1):h.push(id);setDashWidgets(p=>({...p,hidden:h}))};
+const moveWidget=(id,dir)=>{const o=[...order];const i=o.indexOf(id);if(i<0)return;const ni=i+dir;if(ni<0||ni>=o.length)return;[o[i],o[ni]]=[o[ni],o[i]];setDashWidgets(p=>({...p,order:o}))};
+
+// Widget X button wrapper
+const WBox=({id,children,style})=>{
+if(!isVisible(id)&&!customizing)return null;
+return<div style={{position:"relative",...(style||{}),opacity:customizing&&!isVisible(id)?.4:1}}>
+{!customizing&&<button onClick={()=>toggleWidget(id)} style={{position:"absolute",top:6,right:6,zIndex:5,width:18,height:18,borderRadius:"50%",background:T.bg,border:`1px solid ${T.border}`,color:T.textDim,fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:0,transition:"opacity .2s"}} className="wdg-x" title="Hide widget">✕</button>}
+{children}
+<style>{`.wdg-x{opacity:0!important;transition:opacity .2s}div:hover>.wdg-x{opacity:.6!important}`}</style></div>};
+
+// Widget render map
+const renderWidget=(id)=>{switch(id){
+case"stats":return<WBox id="stats" key="stats"><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:14}}>
 <StatCard title="Net Worth" value={fmt(nw)} change={nwC} icon={TrendingUp} color={T.success} T={T} delay={.05}/>
 <StatCard title="Income" value={fmt(cur.inc)} icon={DollarSign} color={T.info} T={T} delay={.1} subtitle={`Fixed: ${fmt(cur.fix)}`}/>
 <StatCard title="Debt Left" value={fmt(totD)} change={dC} icon={CreditCard} color={totD>0?T.warn:T.success} T={T} delay={.15}/>
-<StatCard title="Savings Rate" value={`${savR.toFixed(1)}%`} icon={PiggyBank} color={savR>15?T.success:savR>5?T.warn:T.danger} T={T} delay={.2}/></div>
-
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
-{(dashWidgets?.whatsLeft!==false)&&(()=>{const fixB=data.fixedBillTotal||0;const varC=data.varCap||690;const left=cur.inc-fixB-varC-totS;const pct=cur.inc>0?((fixB+varC+totS)/cur.inc*100):0;
+<StatCard title="Savings Rate" value={`${savR.toFixed(1)}%`} icon={PiggyBank} color={savR>15?T.success:savR>5?T.warn:T.danger} T={T} delay={.2}/></div></WBox>;
+case"whatsLeft":return<WBox id="whatsLeft" key="whatsLeft">{(()=>{const fixB=data.fixedBillTotal||0;const varC=data.varCap!=null?data.varCap:0;const left=cur.inc-fixB-varC-totS;const pct=cur.inc>0?((fixB+varC+totS)/cur.inc*100):0;
 return<div style={{...glass(T),borderLeft:`3px solid ${left>0?T.success:T.danger}`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
 <div style={lbl(T)}>What's Left</div>
@@ -443,9 +454,8 @@ return<div style={{...glass(T),borderLeft:`3px solid ${left>0?T.success:T.danger
 <div style={{fontSize:7,color:s.c,fontWeight:700}}>{s.l}</div>
 <div style={{fontSize:9,fontWeight:700,fontFamily:"'Space Mono',monospace",color:s.c}}>{fmt(s.v)}</div></div>))}</div>
 <PBar pct={Math.min(pct,100)} color={pct>90?T.danger:pct>70?T.warn:T.success} height={4} bg={T.border}/>
-<div style={{fontSize:9,color:T.textDim,marginTop:4}}>{pct.toFixed(0)}% of income committed • {fmt(left/Math.max(dim-day,1))}/day remaining</div></div>})()}
-
-{(dashWidgets?.featuredGoal!==false)&&(()=>{const goals=userGoals||[];const featured=goals[0];if(!featured)return null;
+<div style={{fontSize:9,color:T.textDim,marginTop:4}}>{pct.toFixed(0)}% of income committed • {fmt(left/Math.max(dim-day,1))}/day remaining</div></div>})()}</WBox>;
+case"featuredGoal":return<WBox id="featuredGoal" key="featuredGoal">{(()=>{const goals=userGoals||[];const featured=goals[0];if(!featured)return null;
 const contribs=(goalContribs||{})[featured.id]||[];const saved=contribs.reduce((s,c)=>s+c.amt,0);
 const target=featured.max||1;const pct=Math.min(saved/target*100,100);const remaining=Math.max(target-saved,0);
 return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
@@ -457,15 +467,12 @@ return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
 <PBar pct={pct} color={T.info} height={8} bg={T.border}/>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
 <div><div style={{fontSize:8,color:T.textDim}}>REMAINING</div><div style={{fontSize:14,fontWeight:700,color:T.warn}}>{fmt(remaining)}</div></div>
-<div><div style={{fontSize:8,color:T.textDim}}>PROGRESS</div><div style={{fontSize:14,fontWeight:700,color:T.success}}>{pct.toFixed(0)}%</div></div></div></div>})()}</div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:14,marginTop:14}}>
-<VelocityGauge spent={totS} budget={totB} day={day} dim={dim} T={T}/>
-<RunwayCalc savings={totalSav} burn={avgBurn} T={T}/></div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:14,marginTop:14}}>
-<FreedomDate savings={totalSav} burn={avgBurn} sideInc={sideInc} T={T}/>
-<StreaksW txns={txns.filter(t=>!t.isBill)} budget={totB} day={day} T={T} debts={data.debts}/></div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
-<div style={glass(T)}><div style={lbl(T)}>Net Worth Trend</div>
+<div><div style={{fontSize:8,color:T.textDim}}>PROGRESS</div><div style={{fontSize:14,fontWeight:700,color:T.success}}>{pct.toFixed(0)}%</div></div></div></div>})()}</WBox>;
+case"velocity":return<WBox id="velocity" key="velocity"><VelocityGauge spent={totS} budget={totB} day={day} dim={dim} T={T}/></WBox>;
+case"runway":return<WBox id="runway" key="runway"><RunwayCalc savings={totalSav} burn={avgBurn} T={T}/></WBox>;
+case"freedom":return<WBox id="freedom" key="freedom"><FreedomDate savings={totalSav} burn={avgBurn} sideInc={sideInc} T={T}/></WBox>;
+case"streaks":return<WBox id="streaks" key="streaks"><StreaksW txns={txns.filter(t=>!t.isBill)} budget={totB} day={day} T={T} debts={data.debts}/></WBox>;
+case"nwTrend":return<WBox id="nwTrend" key="nwTrend"><div style={glass(T)}><div style={lbl(T)}>Net Worth Trend</div>
 <ResponsiveContainer width="100%" height={180}>
 <AreaChart data={(history||[]).map(h=>({name:h.m,nw:(h.sav+h.ira+h.stk+h.jnt)-h.loans}))}>
 <defs><linearGradient id="nwG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.success} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={0}/></linearGradient></defs>
@@ -473,8 +480,49 @@ return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
 <XAxis dataKey="name" tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
 <YAxis tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`}/>
 <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,fontSize:11,color:T.text}} formatter={v=>[fmt(v),"NW"]}/>
-<Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div>
-<SpendHeatmap txns={txns.filter(t=>!t.isBill)} dim={dim} off={mOff} T={T}/></div></div>)}
+<Area type="monotone" dataKey="nw" stroke={T.success} strokeWidth={2} fill="url(#nwG)"/></AreaChart></ResponsiveContainer></div></WBox>;
+case"heatmap":return<WBox id="heatmap" key="heatmap"><SpendHeatmap txns={txns.filter(t=>!t.isBill)} dim={dim} off={mOff} T={T}/></WBox>;
+default:return null}};
+
+// Group widgets into paired rows
+const visibleOrder=order.filter(id=>isVisible(id)||customizing);
+const paired=[];
+const singles=["stats"];const fullWidth=["stats"];
+for(let i=0;i<visibleOrder.length;i++){
+const id=visibleOrder[i];
+if(fullWidth.includes(id)){paired.push([id]);continue}
+if(i+1<visibleOrder.length&&!fullWidth.includes(visibleOrder[i+1])){paired.push([id,visibleOrder[i+1]]);i++}
+else paired.push([id])}
+
+return(<div>
+<div style={{...glass(T),marginBottom:14,display:"flex",gap:8,alignItems:"center"}}>
+<span style={{fontSize:16,color:T.textDim}}>$</span>
+<input value={qa} onChange={e=>setQa(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addQA()}
+placeholder='Quick add: "42 Marianos" → auto-categorized' style={{...inpS(T),border:"none",background:"transparent",fontSize:13,flex:1,padding:"8px 0"}}/>
+<button onClick={addQA} disabled={!qa.trim()} style={{...btnS(T,true),opacity:qa.trim()?1:.4}}><Plus size={12}/>Add</button>
+{undoStack&&undoStack.length>0&&<button onClick={undo} style={{...btnS(T,false),fontSize:10}} title="Undo last delete">↩ Undo</button>}
+<button onClick={()=>setCustomizing(!customizing)} style={{...btnS(T,customizing),background:customizing?accent:undefined,color:customizing?"#fff":T.text,fontSize:10}} title="Customize dashboard"><Settings size={12}/>{customizing?"Done":"Customize"}</button></div>
+
+{!customizing&&<InsightBar insights={ins} idx={insI} T={T}/>}
+
+{customizing&&<div style={{...glass(T),marginBottom:14}}>
+<div style={lbl(T)}>Dashboard Layout</div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:12}}>Toggle widgets on/off. Use arrows to reorder.</div>
+{order.map((id,i)=>{const m=WIDGET_META[id];if(!m)return null;const vis=isVisible(id);return(
+<div key={id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${T.border}`,opacity:vis?1:.5}}>
+<div style={{display:"flex",flexDirection:"column",gap:2}}>
+<button onClick={()=>moveWidget(id,-1)} disabled={i===0} style={{background:"none",border:"none",color:i===0?T.border:T.textMuted,cursor:i===0?"default":"pointer",fontSize:10,padding:0}}>▲</button>
+<button onClick={()=>moveWidget(id,1)} disabled={i===order.length-1} style={{background:"none",border:"none",color:i===order.length-1?T.border:T.textMuted,cursor:i===order.length-1?"default":"pointer",fontSize:10,padding:0}}>▼</button></div>
+<span style={{fontSize:16}}>{m.icon}</span>
+<span style={{flex:1,fontSize:12,fontWeight:600}}>{m.name}</span>
+<button onClick={()=>toggleWidget(id)} style={{...btnS(T,vis),fontSize:10,padding:"4px 10px",background:vis?T.success+"20":T.border,color:vis?T.success:T.textDim,border:`1px solid ${vis?T.success:T.border}`}}>{vis?"Visible":"Hidden"}</button>
+</div>)})}
+</div>}
+
+{!customizing&&paired.map((row,ri)=>(
+<div key={ri} style={{display:"grid",gridTemplateColumns:row.length===1?"1fr":"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
+{row.map(id=>renderWidget(id))}</div>))}
+</div>)}
 
 function TxnPage({T,txns,setTxns,addTxnsSmart,cats,byCat,billNames,mo,apiKey,aiModel,callAI,provider,customSplits,setCustomSplits,userCards,splitPartner,undoStack,setUndoStack}){
 const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[cardF,setCardF]=useState("");const[showAdd,setShowAdd]=useState(false);
@@ -1883,7 +1931,8 @@ const[varCap,setVarCap]=useState(0);
 const[onboarded,setOnboarded]=useState(true);
 const[userCards,setUserCards]=useState(CARD_MAP_DEFAULT);
 const[splitPartner,setSplitPartner]=useState("Sarah");
-const[dashWidgets,setDashWidgets]=useState({whatsLeft:true,featuredGoal:true});
+const DEFAULT_DASH={order:["stats","whatsLeft","featuredGoal","velocity","runway","freedom","streaks","nwTrend","heatmap"],hidden:[]};
+const[dashWidgets,setDashWidgets]=useState(DEFAULT_DASH);
 const[undoStack,setUndoStack]=useState([]);
 const[savAccounts,setSavAccounts]=useState(null);
 const[qa,setQa]=useState("");
@@ -1948,7 +1997,11 @@ d.varCap!=null?setVarCap(d.varCap):setVarCap(isGreg?690:0);
 d.onboarded!=null?setOnboarded(d.onboarded):setOnboarded(isGreg);
 d.userCards?setUserCards(d.userCards):setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});
 d.splitPartner?setSplitPartner(d.splitPartner):setSplitPartner(isGreg?"Sarah":"Partner");
-if(d.dashWidgets){const dw={...d.dashWidgets};if(dw.featuredGoal===undefined)dw.featuredGoal=true;setDashWidgets(dw)}else setDashWidgets({whatsLeft:true,featuredGoal:true});
+if(d.dashWidgets){
+// Migrate old {whatsLeft:true,featuredGoal:true} to new {order:[],hidden:[]}
+if(d.dashWidgets.order){setDashWidgets(d.dashWidgets)}
+else{const h=[];if(d.dashWidgets.whatsLeft===false)h.push("whatsLeft");if(d.dashWidgets.featuredGoal===false)h.push("featuredGoal");setDashWidgets({...DEFAULT_DASH,hidden:h})}
+}else setDashWidgets(DEFAULT_DASH);
 d.savAccounts&&setSavAccounts(d.savAccounts);
 }else{
 // No saved data — fresh user gets clean defaults, Greg gets his
@@ -1961,7 +2014,7 @@ setUserGoals(isGreg?GREG_GOALS:null);
 setGoalContribs(isGreg?GREG_GOAL_CONTRIBS:{});
 setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
 setOnboarded(isGreg);setPersona("pro");setTab("dash");
-setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");setDashWidgets({whatsLeft:true,featuredGoal:true});setSavAccounts(null);
+setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");setDashWidgets(DEFAULT_DASH);setSavAccounts(null);
 }
 setUndoStack([]);setAiChat([]);
 setLoaded(true);setTimeout(()=>{savingGate.current=false},300)})()},[activeUser]);
@@ -2057,7 +2110,7 @@ try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({
 setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
-case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,history,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
+case"dash":return<DashPage T={T} accent={accent} setDashWidgets={setDashWidgets} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,history,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider} customSplits={customSplits} setCustomSplits={setCustomSplits} userCards={userCards} splitPartner={splitPartner} undoStack={undoStack} setUndoStack={setUndoStack}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
@@ -2124,10 +2177,8 @@ case"settings":return(
 </div>))}
 <button onClick={()=>{const name=prompt("Card name (e.g. Amex):");if(name){const id=name.toLowerCase().replace(/[^a-z0-9]/g,"");setUserCards(p=>({...p,[id]:name}))}}} style={{...btnS(T,false),fontSize:10,padding:"4px 10px"}}><Plus size={10}/>Add Card</button></div>
 <div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Dashboard widgets</div>
-<div style={{display:"flex",gap:8}}>
-<label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={dashWidgets.featuredGoal!==false} onChange={e=>setDashWidgets(p=>({...p,featuredGoal:e.target.checked}))}/>Featured Goal</label>
-<label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={dashWidgets.whatsLeft!==false} onChange={e=>setDashWidgets(p=>({...p,whatsLeft:e.target.checked}))}/>What\'s Left</label>
-</div></div>
+<div style={{fontSize:11,color:T.textMuted}}>Use the <strong>Customize</strong> button on the Dashboard to show/hide and reorder widgets.</div>
+</div>
 
 <button onClick={()=>{if(confirm("Reset ALL data for "+activeUser+"? This cannot be undone.")){savingGate.current=false;svData(null,activeUser);setLoaded(false);savingGate.current=true;setAuthed(false)}}} style={{...btnS(T,false),color:T.danger}}><Trash2 size={12}/>Reset Account</button>
 <button onClick={()=>{savingGate.current=true;setAuthed(false);setLoaded(false)}} style={{...btnS(T,false),marginLeft:"auto"}}><Lock size={12}/>Lock</button></div></div></div>);
