@@ -538,13 +538,13 @@ const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");c
 const[editCardId,setEditCardId]=useState(null);const[editCatId,setEditCatId]=useState(null);
 const[editTxnId,setEditTxnId]=useState(null);const[editTxn,setEditTxn]=useState({});
 const[splitTxnId,setSplitTxnId]=useState(null);const[splitPct,setSplitPct2]=useState(50);
-const splitTxn=(t)=>{const pct=splitPct;const item={id:`c_${Date.now()}`,txnId:t.id,desc:t.desc,amt:t.amt,sarahAmt:Math.round(t.amt*pct/100*100)/100,gregAmt:Math.round(t.amt*(1-pct/100)*100)/100,pct,date:t.d,settled:false,type:"custom"};
+const splitTxn=(t)=>{const pct=splitPct;const item={id:`c_${Date.now()}`,txnId:t.id,desc:t.desc,amt:t.amt,partnerAmt:Math.round(t.amt*pct/100*100)/100,myAmt:Math.round(t.amt*(1-pct/100)*100)/100,pct,date:t.d,settled:false,type:"custom"};
 setCustomSplits(p=>({...p,[mo]:[...(p[mo]||[]),item]}));
 // Mark txn with split info
 setTxns(p=>p.map(x=>x.id===t.id?{...x,splitPct:pct,splitAmt:Math.round(t.amt*(1-pct/100)*100)/100}:x));
 setSplitTxnId(null)};
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
-const isBillTxn=useCallback(t=>{if(t.isBill)return true;const dl=t.desc.toLowerCase();const clean=dl.replace(/ \(greg \d+%\)| \(sarah \d+%\)/i,"");if(billNames&&(billNames.has(dl)||billNames.has(clean)))return true;return false},[billNames]);
+const isBillTxn=useCallback(t=>{if(t.isBill)return true;const dl=t.desc.toLowerCase();const clean=dl.replace(/ \((?:you|greg|sarah|partner) \d+%\)/i,"");if(billNames&&(billNames.has(dl)||billNames.has(clean)))return true;return false},[billNames]);
 const byCard=useMemo(()=>{const m={};txns.filter(t=>!isBillTxn(t)).forEach(t=>{m[t.card]=(m[t.card]||0)+t.amt});return m},[txns,billNames,isBillTxn]);
 const filtered=useMemo(()=>{let f=txns.filter(t=>!isBillTxn(t));if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);if(cardF)f=f.filter(t=>t.card===cardF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF,cardF,billNames,isBillTxn]);
 const addTxn=()=>{if(!af.desc||!af.amt)return;addTxnsSmart([{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card}]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
@@ -894,7 +894,7 @@ const fixedBills=allBills.filter(b=>b.kind!=="variable");const varBills=allBills
 const fixedTotal=fixedBills.reduce((s,b)=>s+b.amt,0);const varBudget=varBills.reduce((s,b)=>s+b.amt,0);
 const varActual=varBills.reduce((s,b)=>s+(moActuals[b.id]!=null?moActuals[b.id]:0),0);
 const varVariance=varActual-varBudget;
-const sarahTotal=allBills.filter(b=>moSplits[b.id]&&moSplits[b.id].confirmed).reduce((s,b)=>{const sp=moSplits[b.id];const actual=moActuals[b.id]!=null?moActuals[b.id]:b.amt;return s+actual*(sp.pct/100)},0);
+const partnerTotal=allBills.filter(b=>moSplits[b.id]&&moSplits[b.id].confirmed).reduce((s,b)=>{const sp=moSplits[b.id];const actual=moActuals[b.id]!=null?moActuals[b.id]:b.amt;return s+actual*(sp.pct/100)},0);
 const paidCount=allBills.filter(b=>paidSet.has(b.id)).length;
 const incomeAfterBills=bal.inc-fixedTotal-varCap;
 const[view,setView]=useState("list");const[sort,setSort]=useState("due");
@@ -908,7 +908,7 @@ else if(sort==="amt")s.sort((a,b)=>b.amt-a.amt);else if(sort==="name")s.sort((a,
 else if(sort==="status")s.sort((a,b)=>(paidSet.has(a.id)?1:0)-(paidSet.has(b.id)?1:0));
 else if(sort==="group")s.sort((a,b)=>(a.group||"").localeCompare(b.group||""));return s};
 
-const toggleSplit=(bid)=>{const ms={...moSplits};if(ms[bid])delete ms[bid];else ms[bid]={pct:50,who:"sarah"};setSplits(p=>({...p,[mo]:ms}))};
+const toggleSplit=(bid)=>{const ms={...moSplits};if(ms[bid])delete ms[bid];else ms[bid]={pct:50,who:"partner"};setSplits(p=>({...p,[mo]:ms}))};
 const setSplitPct=(bid,pct)=>{const ms={...moSplits};ms[bid]={...ms[bid],pct:+pct};setSplits(p=>({...p,[mo]:ms}))};
 
 const payBill=(bill)=>{
@@ -916,16 +916,16 @@ if(bill.kind==="variable"&&!moActuals[bill.id]){setPayPrompt(bill);setPayAmt(Str
 const actual=moActuals[bill.id]!=null?moActuals[bill.id]:bill.amt;
 const cur=new Set(billsPaid[mo]||[]);cur.add(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}));
 const sp=(moSplits[bill.id]&&moSplits[bill.id].confirmed)?moSplits[bill.id]:null;
-const gregAmt=sp?actual*(1-sp.pct/100):actual;
-addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (Greg ${100-sp.pct}%)`:""),amt:Math.round(gregAmt*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}]);
-if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (Sarah ${sp.pct}%)`,amt:Math.round(actual*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}])}};
+const myAmt2=sp?actual*(1-sp.pct/100):actual;
+addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (You ${100-sp.pct}%)`:""),amt:Math.round(myAmt2*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}]);
+if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (${splitPartner||"Partner"} ${sp.pct}%)`,amt:Math.round(actual*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}])}};
 
 const confirmPayActual=()=>{if(!payPrompt)return;const ma={...(billActuals[mo]||{})};ma[payPrompt.id]=+payAmt;setBillActuals(p=>({...p,[mo]:ma}));
 const bill=payPrompt;const actual=+payAmt;setPayPrompt(null);
 setTimeout(()=>{const cur=new Set(billsPaid[mo]||[]);cur.add(bill.id);setBillsPaid(p=>({...p,[mo]:[...cur]}));
-const sp=(moSplits[bill.id]&&moSplits[bill.id].confirmed)?moSplits[bill.id]:null;const gregAmt=sp?actual*(1-sp.pct/100):actual;
-addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (Greg ${100-sp.pct}%)`:""),amt:Math.round(gregAmt*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}]);
-if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (Sarah ${sp.pct}%)`,amt:Math.round(actual*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}])}},50)};
+const sp=(moSplits[bill.id]&&moSplits[bill.id].confirmed)?moSplits[bill.id]:null;const myAmt2=sp?actual*(1-sp.pct/100):actual;
+addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:bill.desc+(sp?` (You ${100-sp.pct}%)`:""),amt:Math.round(myAmt2*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}]);
+if(sp){addTxnsSmart([{id:Date.now()+1,d:new Date().toISOString().split("T")[0],desc:bill.desc+` (${splitPartner||"Partner"} ${sp.pct}%)`,amt:Math.round(actual*sp.pct/100*100)/100,cat:bill.cat||"misc",card:"debit",isBill:true}])}},50)};
 
 const unpay=(bid)=>{const cur=new Set(billsPaid[mo]||[]);cur.delete(bid);setBillsPaid(p=>({...p,[mo]:[...cur]}))};
 const addBill=()=>{if(!newBill.desc||!newBill.amt)return;setRecurring(p=>[...p,{desc:newBill.desc,amt:+newBill.amt,cat:newBill.cat,kind:newBill.kind,group:newBill.group||"Other",due:+newBill.due||0}]);setNewBill({desc:"",amt:"",cat:"misc",kind:"fixed",group:"",due:1});setShowAdd(false)};
@@ -992,7 +992,7 @@ return<div style={{display:"grid",gridTemplateColumns:"50px 50px 50px 50px",gap:
 <input type="range" min={10} max={90} step={5} value={sp.pct} onChange={e=>setSplitPct(b.id,e.target.value)} style={{flex:1,accentColor:T.purple}}/>
 <span style={{fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{sp.pct}%</span>
 <span style={{fontSize:9,color:T.textDim}}>= {fmt(splitAmt*sp.pct/100)}{isVar&&actual!=null&&` of ${fmt(splitAmt)} bill`}</span></div>
-<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"4px 12px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm — Greg {fmt(splitAmt*(1-sp.pct/100))} / Sarah {fmt(splitAmt*sp.pct/100)}</button></div>})()}
+<button onClick={()=>{const ms={...moSplits};ms[b.id]={...ms[b.id],confirmed:true,date:new Date().toISOString().split("T")[0]};setSplits(p=>({...p,[mo]:ms}))}} style={{...btnS(T,true),fontSize:9,padding:"4px 12px",background:T.purple,color:"#fff",marginTop:4}}><Check size={9}/>Confirm — You {fmt(splitAmt*(1-sp.pct/100))} / {splitPartner||"Partner"} {fmt(splitAmt*sp.pct/100)}</button></div>})()}
 {/* Split confirmed badge */}
 {sp&&sp.confirmed&&!paid&&<div style={{marginLeft:34,marginTop:3,display:"flex",gap:6,alignItems:"center"}}>
 <span style={pill(T.successBg,T.success)}>✓ Split {sp.pct}% confirmed</span>
@@ -1011,7 +1011,7 @@ return(<div>
 {payPrompt&&<Modal onClose={()=>setPayPrompt(null)} T={T}>
 <div style={{fontSize:16,fontWeight:700,marginBottom:12}}>How much was {payPrompt.desc} this month?</div>
 <div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Your allocation: {fmt(payPrompt.amt)}</div>
-{moSplits[payPrompt.id]&&moSplits[payPrompt.id].confirmed&&<div style={{fontSize:11,color:T.purple,marginBottom:4}}>Split {moSplits[payPrompt.id].pct}% with Sarah — enter the FULL bill amount, split is auto-calculated</div>}
+{moSplits[payPrompt.id]&&moSplits[payPrompt.id].confirmed&&<div style={{fontSize:11,color:T.purple,marginBottom:4}}>Split {moSplits[payPrompt.id].pct}% with partner — enter the FULL bill amount, split is auto-calculated</div>}
 <div style={{fontSize:11,color:T.textDim,marginBottom:12}}>Enter the total amount on the bill</div>
 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16}}>
 <span style={{fontSize:16,color:T.textDim}}>$</span>
@@ -1041,7 +1041,7 @@ return<div style={{fontSize:12,marginBottom:12}}>
 <StatCard title="Fixed" value={fmt(fixedTotal)} icon={Lock} color={T.info} T={T}/>
 <StatCard title="Var Cap" value={fmt(varCap)} icon={Activity} color={T.warn} T={T}/>
 {varActual>0&&<StatCard title="+/-" value={(varActual-varCap>=0?"+":"")+fmt(varActual-varCap)} icon={varActual>varCap?TrendingUp:TrendingDown} color={varActual>varCap?T.danger:T.success} T={T}/>}
-{sarahTotal>0&&<StatCard title="Partner" value={fmt(sarahTotal)} icon={User} color={T.purple} T={T}/>}</div>
+{partnerTotal>0&&<StatCard title="Partner" value={fmt(partnerTotal)} icon={User} color={T.purple} T={T}/>}</div>
 
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
 <div style={{display:"flex",gap:4}}>
@@ -1232,7 +1232,7 @@ const getBillAmt=(b)=>moActuals[b.id]!=null?moActuals[b.id]:b.amt;
 
 // Detect orphaned splits (old index-based IDs that don't match any current bill)
 const validIds=new Set(allBills.map(b=>b.id));
-const orphanedSplits=Object.entries(moSplits).filter(([k,v])=>v.confirmed&&!validIds.has(k)&&k.startsWith("r_")).map(([k,v])=>({id:k,desc:k,pct:v.pct,date:v.date,settled:v.settled,settledDate:v.settledDate,sarahAmt:0,gregAmt:0,source:"orphan"}));
+const orphanedSplits=Object.entries(moSplits).filter(([k,v])=>v.confirmed&&!validIds.has(k)&&k.startsWith("r_")).map(([k,v])=>({id:k,desc:k,pct:v.pct,date:v.date,settled:v.settled,settledDate:v.settledDate,partnerAmt:0,myAmt:0,source:"orphan"}));
 
 const removeSplit=(bid)=>{const ms={...moSplits};delete ms[bid];setSplits(p=>({...p,[mo]:ms}))};
 
@@ -1240,22 +1240,22 @@ const removeSplit=(bid)=>{const ms={...moSplits};delete ms[bid];setSplits(p=>({.
 const moCustom=customSplits[mo]||[];
 
 // Recurring splits auto-seed into this month
-const moRecurring=recurringSplits.map((r,i)=>{const existing=moCustom.find(c=>c.recurId===r.id);return existing||{id:`rec_${r.id}_${mo}`,recurId:r.id,desc:r.desc,amt:r.amt,sarahAmt:r.amt*((r.pct||50)/100),gregAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}}).filter(r=>!moCustom.find(c=>c.recurId===r.recurId));
+const moRecurring=recurringSplits.map((r,i)=>{const existing=moCustom.find(c=>c.recurId===r.id);return existing||{id:`rec_${r.id}_${mo}`,recurId:r.id,desc:r.desc,amt:r.amt,partnerAmt:r.amt*((r.pct||50)/100),myAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}}).filter(r=>!moCustom.find(c=>c.recurId===r.recurId));
 const allCustom=[...moCustom,...moRecurring];
 
 // Totals across all sources - use actual bill amount, not allocation
-const billSarah=splitBills.reduce((s,b)=>s+getBillAmt(b)*(moSplits[b.id].pct/100),0);
-const customSarah=allCustom.reduce((s,c)=>s+c.sarahAmt,0);
-const totalSarah=billSarah+customSarah;
-const billGreg=splitBills.reduce((s,b)=>s+getBillAmt(b)*(1-moSplits[b.id].pct/100),0);
-const customGreg=allCustom.reduce((s,c)=>s+c.gregAmt,0);
-const totalGreg=billGreg+customGreg;
+const billPartner=splitBills.reduce((s,b)=>s+getBillAmt(b)*(moSplits[b.id].pct/100),0);
+const customPartner=allCustom.reduce((s,c)=>s+c.partnerAmt,0);
+const totalPartner=billPartner+customPartner;
+const billMy=splitBills.reduce((s,b)=>s+getBillAmt(b)*(1-moSplits[b.id].pct/100),0);
+const customMy=allCustom.reduce((s,c)=>s+c.myAmt,0);
+const totalMy=billMy+customMy;
 
 const billSettled=splitBills.filter(b=>moSplits[b.id].settled).reduce((s,b)=>s+getBillAmt(b)*(moSplits[b.id].pct/100),0);
-const customSettled=allCustom.filter(c=>c.settled).reduce((s,c)=>s+c.sarahAmt,0);
+const customSettled=allCustom.filter(c=>c.settled).reduce((s,c)=>s+c.partnerAmt,0);
 const totalSettled=billSettled+customSettled;
-const unsettled=totalSarah-totalSettled;
-const allItems=[...splitBills.map(b=>{const ba=getBillAmt(b);return{...b,amt:ba,sarahAmt:ba*(moSplits[b.id].pct/100),gregAmt:ba*(1-moSplits[b.id].pct/100),pct:moSplits[b.id].pct,date:moSplits[b.id].date,settled:moSplits[b.id].settled,settledDate:moSplits[b.id].settledDate,source:"bill"}}),...allCustom.map(c=>({...c,source:c.type||"custom"}))];
+const unsettled=totalPartner-totalSettled;
+const allItems=[...splitBills.map(b=>{const ba=getBillAmt(b);return{...b,amt:ba,partnerAmt:ba*(moSplits[b.id].pct/100),myAmt:ba*(1-moSplits[b.id].pct/100),pct:moSplits[b.id].pct,date:moSplits[b.id].date,settled:moSplits[b.id].settled,settledDate:moSplits[b.id].settledDate,source:"bill"}}),...allCustom.map(c=>({...c,source:c.type||"custom"}))];
 
 const[showAdd,setShowAdd]=useState(false);const[showRecAdd,setShowRecAdd]=useState(false);
 const[nf,setNf]=useState({desc:"",total:"",pct:50});
@@ -1266,7 +1266,7 @@ if(item.source==="bill"){const ms={...moSplits};ms[item.id]={...ms[item.id],sett
 else{const mc=[...allCustom];const idx=mc.findIndex(c=>c.id===item.id);if(idx>=0){mc[idx]={...mc[idx],settled:!mc[idx].settled,settledDate:!mc[idx].settled?new Date().toISOString().split("T")[0]:null};setCustomSplits(p=>({...p,[mo]:mc}))}}};
 
 const addCustom=()=>{if(!nf.desc||!nf.total)return;const total=+nf.total;const pct=+nf.pct;
-const item={id:`c_${Date.now()}`,desc:nf.desc,amt:total,sarahAmt:Math.round(total*pct/100*100)/100,gregAmt:Math.round(total*(1-pct/100)*100)/100,pct,date:new Date().toISOString().split("T")[0],settled:false,type:"custom"};
+const item={id:`c_${Date.now()}`,desc:nf.desc,amt:total,partnerAmt:Math.round(total*pct/100*100)/100,myAmt:Math.round(total*(1-pct/100)*100)/100,pct,date:new Date().toISOString().split("T")[0],settled:false,type:"custom"};
 setCustomSplits(p=>({...p,[mo]:[...(p[mo]||[]),item]}));setNf({desc:"",total:"",pct:50});setShowAdd(false)};
 
 const addRecurring=()=>{if(!rf.desc||!rf.amt)return;
@@ -1275,16 +1275,16 @@ setRecurringSplits(p=>[...p,{id:`rs_${Date.now()}`,desc:rf.desc,amt:+rf.amt,pct:
 const removeCustom=(id)=>setCustomSplits(p=>({...p,[mo]:(p[mo]||[]).filter(c=>c.id!==id)}));
 const removeRecurring=(id)=>setRecurringSplits(p=>p.filter(r=>r.id!==id));
 
-const copySummary=()=>{const lines=allItems.map(i=>`${i.desc}: ${fmt(i.sarahAmt)}${i.pct!==100?` (${i.pct}% of ${fmt(i.amt)})`:""}`);
-const txt=`Hey Sarah! Here\'s your share for ${mo}:\n\n${lines.join("\n")}\n\nTotal: ${fmt(totalSarah)}${totalSettled>0?`\nSettled: ${fmt(totalSettled)}\nRemaining: ${fmt(unsettled)}`:""}`;
+const copySummary=()=>{const lines=allItems.map(i=>`${i.desc}: ${fmt(i.partnerAmt)}${i.pct!==100?` (${i.pct}% of ${fmt(i.amt)})`:""}`);
+const txt=`Hey ${splitPartner||'Partner'}! Here\'s your share for ${mo}:\n\n${lines.join("\n")}\n\nTotal: ${fmt(totalPartner)}${totalSettled>0?`\nSettled: ${fmt(totalSettled)}\nRemaining: ${fmt(unsettled)}`:""}`;
 navigator.clipboard?.writeText(txt.replace(/\\n/g,"\n"))};
 
 return(<div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
-<StatCard title="Partner Owes" value={fmt(totalSarah)} icon={User} color={T.purple} T={T} subtitle={`${allItems.length} items`}/>
+<StatCard title="Partner Owes" value={fmt(totalPartner)} icon={User} color={T.purple} T={T} subtitle={`${allItems.length} items`}/>
 <StatCard title="Settled" value={fmt(totalSettled)} icon={Check} color={T.success} T={T}/>
 <StatCard title="Unsettled" value={fmt(unsettled)} icon={Clock} color={unsettled>0?T.warn:T.success} T={T} subtitle={unsettled<=0?"All clear!":"Pending"}/>
-<StatCard title="Greg's Share" value={fmt(totalGreg)} icon={DollarSign} color={T.info} T={T}/></div>
+<StatCard title="Your Share" value={fmt(totalMy)} icon={DollarSign} color={T.info} T={T}/></div>
 
 <div style={glass(T)}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
@@ -1299,21 +1299,21 @@ return(<div>
 <div style={{display:"flex",gap:8,alignItems:"end",flexWrap:"wrap"}}>
 <div style={{flex:1,minWidth:140}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>What</div><input placeholder="Dinner at Gilt Bar" value={nf.desc} onChange={e=>setNf(p=>({...p,desc:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addCustom()} style={{...inpS(T),fontSize:12}}/></div>
 <div style={{width:90}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Total paid</div><input type="number" placeholder="$0" value={nf.total} onChange={e=>setNf(p=>({...p,total:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
-<div style={{width:80}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Sarah %</div><input type="number" min={1} max={100} value={nf.pct} onChange={e=>setNf(p=>({...p,pct:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:80}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Partner %</div><input type="number" min={1} max={100} value={nf.pct} onChange={e=>setNf(p=>({...p,pct:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
 <button onClick={addCustom} style={btnS(T,true)}><Check size={12}/></button></div>
-{nf.total&&<div style={{fontSize:11,color:T.purple,marginTop:6}}>Partner: {fmt(+nf.total*(+nf.pct/100))} • Greg: {fmt(+nf.total*(1-+nf.pct/100))}</div>}</div>}
+{nf.total&&<div style={{fontSize:11,color:T.purple,marginTop:6}}>Partner: {fmt(+nf.total*(+nf.pct/100))} • You: {fmt(+nf.total*(1-+nf.pct/100))}</div>}</div>}
 
 {showRecAdd&&<div style={{padding:12,background:T.bg,borderRadius:10,marginBottom:12,animation:"fadeUp .2s ease"}}>
 <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Add recurring split (auto-populates every month)</div>
 <div style={{display:"flex",gap:8,alignItems:"end",flexWrap:"wrap"}}>
 <div style={{flex:1,minWidth:140}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>What</div><input placeholder="Groceries split" value={rf.desc} onChange={e=>setRf(p=>({...p,desc:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addRecurring()} style={{...inpS(T),fontSize:12}}/></div>
 <div style={{width:90}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Amount</div><input type="number" placeholder="$0" value={rf.amt} onChange={e=>setRf(p=>({...p,amt:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
-<div style={{width:80}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Sarah %</div><input type="number" min={1} max={100} value={rf.pct} onChange={e=>setRf(p=>({...p,pct:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:80}}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>Partner %</div><input type="number" min={1} max={100} value={rf.pct} onChange={e=>setRf(p=>({...p,pct:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
 <button onClick={addRecurring} style={btnS(T,true)}><Check size={12}/></button></div>
 {recurringSplits.length>0&&<div style={{marginTop:8,borderTop:`1px solid ${T.border}`,paddingTop:8}}>
 <div style={{fontSize:10,color:T.textDim,fontWeight:600,marginBottom:4}}>Active recurring:</div>
 {recurringSplits.map(r=><div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11,padding:"3px 0"}}>
-<span>{r.desc} — {fmt(r.amt)} ({r.pct}% Sarah)</span>
+<span>{r.desc} — {fmt(r.amt)} ({r.pct}% {splitPartner||"Partner"})</span>
 <button onClick={()=>removeRecurring(r.id)} style={{background:"none",border:"none",color:T.danger,cursor:"pointer"}}><Trash2 size={10}/></button></div>)}</div>}</div>}
 
 {allItems.length===0?(<div style={{textAlign:"center",padding:30,color:T.textDim}}>
@@ -1329,8 +1329,8 @@ const renderRow=(item,i)=>(
 <td style={{padding:"8px 8px"}}><div style={{fontSize:12,fontWeight:600,textDecoration:item.settled?"line-through":"none"}}>{item.desc}</div></td>
 <td style={{padding:"8px 8px"}}><span style={pill(item.source==="bill"?T.infoBg:item.source==="recurring"?T.warnBg:T.purpleBg,item.source==="bill"?T.info:item.source==="recurring"?T.warn:T.purple)}>
 {item.source==="bill"?"📋 Bill":item.source==="recurring"?"🔄 Monthly":"📌 One-off"}</span></td>
-<td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(item.sarahAmt)}</td>
-<td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(item.gregAmt)}</td>
+<td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(item.partnerAmt)}</td>
+<td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(item.myAmt)}</td>
 <td style={{padding:"8px 4px"}}><button onClick={()=>item.source==="bill"?removeSplit(item.id):removeCustom(item.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.3}} title="Remove split"><Trash2 size={10}/></button></td>
 </tr>);
 const headers=["","Date","Item","Type",splitPartner||"Partner","You",""].map((h,i)=><th key={i} style={{textAlign:i>=4&&i<=5?"right":"left",padding:"8px 8px",fontSize:9,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>);
@@ -1343,7 +1343,7 @@ return<>
 <thead><tr style={{borderBottom:`2px solid ${T.warn}40`}}>{headers}</tr></thead>
 <tbody>{unpaidItems.map(renderRow)}</tbody></table></div>}
 
-{unpaidItems.length===0&&totalSarah>0&&<div style={{textAlign:"center",padding:16,background:T.successBg,borderRadius:10,marginBottom:14}}>
+{unpaidItems.length===0&&totalPartner>0&&<div style={{textAlign:"center",padding:16,background:T.successBg,borderRadius:10,marginBottom:14}}>
 <div style={{fontSize:14,fontWeight:700,color:T.success}}>✓ All settled for {mo}!</div></div>}
 
 {settledItems.length>0&&<div>
@@ -1366,12 +1366,12 @@ return<>
 
 <div style={{borderTop:`2px solid ${T.border}`,padding:"12px 8px 0",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
 <div>{unsettled>0?<div style={{fontSize:12,color:T.warn,fontWeight:600}}>Partner still owes {fmt(unsettled)}</div>
-:totalSarah>0?<div style={{fontSize:12,color:T.success,fontWeight:600}}>✓ All settled!</div>:null}</div>
+:totalPartner>0?<div style={{fontSize:12,color:T.success,fontWeight:600}}>✓ All settled!</div>:null}</div>
 <div style={{display:"flex",gap:16}}>
-<div style={{textAlign:"right"}}><div style={{fontSize:9,color:T.textDim,textTransform:"uppercase"}}>Sarah</div>
-<div style={{fontSize:18,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(totalSarah)}</div></div>
-<div style={{textAlign:"right"}}><div style={{fontSize:9,color:T.textDim,textTransform:"uppercase"}}>Greg</div>
-<div style={{fontSize:18,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(totalGreg)}</div></div></div></div></div>
+<div style={{textAlign:"right"}}><div style={{fontSize:9,color:T.textDim,textTransform:"uppercase"}}>{splitPartner||"Partner"}</div>
+<div style={{fontSize:18,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.purple}}>{fmt(totalPartner)}</div></div>
+<div style={{textAlign:"right"}}><div style={{fontSize:9,color:T.textDim,textTransform:"uppercase"}}>You</div>
+<div style={{fontSize:18,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.success}}>{fmt(totalMy)}</div></div></div></div></div>
 </div>)}
 
 function SavingsPage({T,bal,setBal,cur,savAccounts,setSavAccounts}){
@@ -1884,7 +1884,7 @@ const[userGoals,setUserGoals]=useState(null);const[goalContribs,setGoalContribs]
 const[aiOpen,setAiOpen]=useState(false);const[aiMsg,setAiMsg]=useState("");const[aiChat,setAiChat]=useState([]);const[aiLoading,setAiLoading]=useState(false);
 const[aiModel,setAiModel]=useState("claude-sonnet-4-20250514");
 const[aiProvider,setAiProvider]=useState("anthropic");
-const[userEmojis,setUserEmojis]=useState({greg:"🎸",sarah:"🌸"});
+const[userEmojis,setUserEmojis]=useState({greg:"🎸"});
 
 const callAI=async({system,messages,image,maxTokens=1000})=>{
 const p=aiProvider;const m=aiModel;const k=apiKey;
@@ -2032,7 +2032,7 @@ useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,de
 const history=activeUser==="greg"?GREG_HISTORY:[];
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const billNames=useMemo(()=>{const names=new Set();recurring.forEach(r=>names.add(r.desc.toLowerCase()));subs.forEach(s=>{if(s.n)names.add(s.n.toLowerCase())});return names},[recurring,subs]);
-const txns=useMemo(()=>txnsRaw.map(t=>{if(t.isBill)return t;if(billNames.has(t.desc.toLowerCase())||billNames.has(t.desc.replace(/ \(Greg \d+%\)| \(Sarah \d+%\)/,"").toLowerCase()))return{...t,isBill:true};return t}),[txnsRaw,billNames]);
+const txns=useMemo(()=>txnsRaw.map(t=>{if(t.isBill)return t;if(billNames.has(t.desc.toLowerCase())||billNames.has(t.desc.replace(/ \((?:You|Greg|Sarah|Partner) \d+%\)/i,"").toLowerCase()))return{...t,isBill:true};return t}),[txnsRaw,billNames]);
 const setTxns=fn=>setMonths(p=>({...p,[mo]:{...p[mo],txns:typeof fn==="function"?fn(p[mo]?.txns||[]):fn}}));
 const setCats=fn=>setMonths(p=>({...p,[mo]:{...p[mo],budgets:typeof fn==="function"?fn(p[mo]?.budgets||DEFAULT_CATS):fn}}));
 
@@ -2072,7 +2072,7 @@ if(dir===1){mi++;if(mi>11){mi=0;yr++}}else{mi--;if(mi<0){mi=11;yr--}}
 const nk=`${MO[mi]}'${String(yr).padStart(2,"0")}`;
 if(!months[nk]){const prevBudgets=months[mo]?.budgets||DEFAULT_CATS;setMonths(prev=>({...prev,[nk]:{txns:[],budgets:prevBudgets.map(c=>({...c}))}}));
 // Auto-seed recurring splits for new month
-if(recurringSplits.length>0){const rc=recurringSplits.map(r=>({id:`rec_${r.id}_${nk}`,recurId:r.id,desc:r.desc,amt:r.amt,sarahAmt:r.amt*((r.pct||50)/100),gregAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}));
+if(recurringSplits.length>0){const rc=recurringSplits.map(r=>({id:`rec_${r.id}_${nk}`,recurId:r.id,desc:r.desc,amt:r.amt,partnerAmt:r.amt*((r.pct||50)/100),myAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}));
 setCustomSplits(p=>({...p,[nk]:[...(p[nk]||[]),...rc.filter(r=>!(p[nk]||[]).find(c=>c.recurId===r.recurId))]}))}}setMo(nk)};
 const byCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);txns.filter(t=>!t.isBill).forEach(t=>{if(m[t.cat]!==undefined)m[t.cat]+=t.amt});return m},[txns,cats]);
 const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]),MO.indexOf(p[0]),1).getDay()+6)%7},[mo]);
@@ -2081,7 +2081,7 @@ const insights=useMemo(()=>{
 const bp=txns.filter(t=>!t.isBill).reduce((mx,t)=>t.amt>mx.amt?t:mx,{amt:0,desc:"-"});const pt=(totS/Math.max(effectiveDay,1))*dim;
 const exitD=exitDate?new Date(exitDate):null;const ed=exitD?Math.max(0,Math.ceil((exitD-now)/86400000)):0;const eLbl=exitLabel||"exit";
 const debtPct=history.length&&history[0].loans?Math.round((history[0].loans-totD)/history[0].loans*100):0;
-const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${debtPct}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,ed>0?`${ed} days to ${eLbl}`:`On track this month`,`Projected: ${fmt(pt)}`],
+const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${debtPct}% eliminated`,cur.ira>0?`IRA: ${fmt(cur.ira)} saved`:`Building savings`,ed>0?`${ed} days to ${eLbl}`:`On track this month`,`Projected: ${fmt(pt)}`],
 unhinged:[savR>20?`${savR.toFixed(1)}% savings?? Who ARE you`:`${savR.toFixed(1)}% savings. Money fleeing`,`${fmt(bp.amt)} at ${bp.desc}. In THIS economy??`,totS>totB?`Budget obliterated. ${fmt(totS-totB)} over`:`${fmt(totB-totS)} under budget. UNWELL`,ed>0?`${ed} days till ${eLbl}. Wallet needs therapy`:`Wallet in survival mode`,pt>cur.inc?`Spending ${fmt(pt)}. Bank writing its will`:`Projected ${fmt(pt)} — wallet survives`],
 dark:[`${savR.toFixed(1)}% savings. Finances outlive you`,totD>0?`${fmt(totD)} debt. Collecting interest like Pokémon`:`Debt free. Die with dignity`,`${fmt(bp.amt)} at ${bp.desc}. Temporary happiness`,ed>0?`${ed} days to ${eLbl}. Running with passport`:`No escape plan. Embrace the void`,totS>totB?`${fmt(totS-totB)} over budget. Plan DOA`:`Under budget by ${fmt(totB-totS)}. Nothing reliable`],
 therapist:[savR>15?`${savR.toFixed(1)}% saved. Proud?`:`${savR.toFixed(1)}% savings. How does that FEEL?`,`${fmt(bp.amt)} at ${bp.desc}. Need or void?`,totS>totB?`Over ${fmt(totS-totB)}. Coping mechanisms?`:`Under budget. Growth. Gold star`,ed>0?`${ed} days to ${eLbl}. Running... with passport`:`No countdown. How does that feel?`,totD>0?`${fmt(totD)} debt. IS about money`:`Debt free! Inner child healing`],
