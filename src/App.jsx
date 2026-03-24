@@ -357,16 +357,19 @@ return(<div style={glass(T)}>
 <div><div style={{fontSize:9,color:T.textDim,textTransform:"uppercase",letterSpacing:1}}>Burn/mo</div><div style={{fontSize:16,fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(burn)}</div></div>
 </div></div>)}
 
-function FreedomDate({savings,burn,sideInc,T}){
-const now=new Date();const exit=new Date(2026,7,1);
+function FreedomDate({savings,burn,sideInc,T,exitDate,exitLabel}){
+const now=new Date();const exit=exitDate?new Date(exitDate):null;
+if(!exit||isNaN(exit.getTime()))return null;
 const days=Math.max(0,Math.ceil((exit-now)/86400000));
 const rep=burn>0?Math.min(sideInc/burn*100,100):0;
+const label=exitLabel||"Exit";
+const dateStr=exit.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
 return(<div style={glass(T)}>
 <div style={lbl(T)}>Freedom Countdown</div>
 <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:8}}>
 <span style={{fontSize:36,fontWeight:900,fontFamily:"'Space Mono',monospace",color:T.info}}>{days}</span>
-<span style={{fontSize:13,color:T.textMuted}}>days to exit</span></div>
-<div style={{fontSize:11,color:T.textDim,marginBottom:14}}>Aug 1, 2026 → Europe</div>
+<span style={{fontSize:13,color:T.textMuted}}>days to {label.toLowerCase()}</span></div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:14}}>{dateStr} → {label}</div>
 <div><div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:4}}>
 <span style={{color:T.textDim}}>Income Replacement</span>
 <span style={{color:rep>=80?T.success:rep>=50?T.warn:T.danger,fontWeight:700}}>{rep.toFixed(0)}%</span></div>
@@ -411,7 +414,7 @@ return(<div style={glass(T)}><div style={lbl(T)}>Daily Spending</div>
 // PAGES
 // ═══════════════════════════════════════════════════
 function DashPage({T,accent,data,qa,setQa,addQA,undoStack,undo,setDashWidgets}){
-const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc,debts,dashWidgets,userGoals,goalContribs,history}=data;
+const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc,debts,dashWidgets,userGoals,goalContribs,history,exitDate,exitLabel}=data;
 const nwC=nwP!==0?((nw-nwP)/Math.abs(nwP)*100):0;
 const dC=prev.loans>0?((totD-prev.loans)/prev.loans*100):0;
 const totalSav=cur.sav+cur.ira+cur.stk+(cur.jnt);
@@ -470,7 +473,7 @@ return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
 <div><div style={{fontSize:8,color:T.textDim}}>PROGRESS</div><div style={{fontSize:14,fontWeight:700,color:T.success}}>{pct.toFixed(0)}%</div></div></div></div>})()}</WBox>;
 case"velocity":return<WBox id="velocity" key="velocity"><VelocityGauge spent={totS} budget={totB} day={day} dim={dim} T={T}/></WBox>;
 case"runway":return<WBox id="runway" key="runway"><RunwayCalc savings={totalSav} burn={avgBurn} T={T}/></WBox>;
-case"freedom":return<WBox id="freedom" key="freedom"><FreedomDate savings={totalSav} burn={avgBurn} sideInc={sideInc} T={T}/></WBox>;
+case"freedom":return<WBox id="freedom" key="freedom"><FreedomDate savings={totalSav} burn={avgBurn} sideInc={sideInc} T={T} exitDate={exitDate} exitLabel={exitLabel}/></WBox>;
 case"streaks":return<WBox id="streaks" key="streaks"><StreaksW txns={txns.filter(t=>!t.isBill)} budget={totB} day={day} T={T} debts={data.debts}/></WBox>;
 case"nwTrend":return<WBox id="nwTrend" key="nwTrend"><div style={glass(T)}><div style={lbl(T)}>Net Worth Trend</div>
 <ResponsiveContainer width="100%" height={180}>
@@ -1935,6 +1938,8 @@ const DEFAULT_DASH={order:["stats","whatsLeft","featuredGoal","velocity","runway
 const[dashWidgets,setDashWidgets]=useState(DEFAULT_DASH);
 const[undoStack,setUndoStack]=useState([]);
 const[savAccounts,setSavAccounts]=useState(null);
+const[exitDate,setExitDate]=useState("2026-08-01");
+const[exitLabel,setExitLabel]=useState("Europe");
 const[qa,setQa]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const savingGate=useRef(false);
@@ -2003,6 +2008,8 @@ if(d.dashWidgets.order){setDashWidgets(d.dashWidgets)}
 else{const h=[];if(d.dashWidgets.whatsLeft===false)h.push("whatsLeft");if(d.dashWidgets.featuredGoal===false)h.push("featuredGoal");setDashWidgets({...DEFAULT_DASH,hidden:h})}
 }else setDashWidgets(DEFAULT_DASH);
 d.savAccounts&&setSavAccounts(d.savAccounts);
+if(d.exitDate)setExitDate(d.exitDate);else setExitDate(isGreg?"2026-08-01":"");
+if(d.exitLabel)setExitLabel(d.exitLabel);else setExitLabel(isGreg?"Europe":"");
 }else{
 // No saved data — fresh user gets clean defaults, Greg gets his
 setMonths({[curMK]:{txns:isGreg?SAMPLE_TXNS:[],budgets:(isGreg?DEFAULT_CATS:BLANK_CATS).map(c=>({...c}))}});
@@ -2014,11 +2021,13 @@ setUserGoals(isGreg?GREG_GOALS:null);
 setGoalContribs(isGreg?GREG_GOAL_CONTRIBS:{});
 setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
 setOnboarded(isGreg);setPersona("pro");setTab("dash");
-setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");setDashWidgets(DEFAULT_DASH);setSavAccounts(null);
+setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");
+setDashWidgets(isGreg?DEFAULT_DASH:{...DEFAULT_DASH,hidden:["freedom","nwTrend"]});
+setSavAccounts(null);setExitDate(isGreg?"2026-08-01":"");setExitLabel(isGreg?"Europe":"");
 }
 setUndoStack([]);setAiChat([]);
 setLoaded(true);setTimeout(()=>{savingGate.current=false},300)})()},[activeUser]);
-useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts]);
+useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts,exitDate,exitLabel},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts,exitDate,exitLabel]);
 
 const history=activeUser==="greg"?GREG_HISTORY:[];
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
@@ -2070,15 +2079,15 @@ const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]
 
 const insights=useMemo(()=>{
 const bp=txns.filter(t=>!t.isBill).reduce((mx,t)=>t.amt>mx.amt?t:mx,{amt:0,desc:"-"});const pt=(totS/Math.max(effectiveDay,1))*dim;
-const ed=Math.max(0,Math.ceil((new Date(2026,7,1)-now)/86400000));
+const exitD=exitDate?new Date(exitDate):null;const ed=exitD?Math.max(0,Math.ceil((exitD-now)/86400000)):0;const eLbl=exitLabel||"exit";
 const debtPct=history.length&&history[0].loans?Math.round((history[0].loans-totD)/history[0].loans*100):0;
-const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${debtPct}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,`${ed} days to Europe`,`Projected: ${fmt(pt)}`],
-unhinged:[savR>20?`${savR.toFixed(1)}% savings?? Who ARE you`:`${savR.toFixed(1)}% savings. Money fleeing`,`${fmt(bp.amt)} at ${bp.desc}. In THIS economy??`,totS>totB?`Budget obliterated. ${fmt(totS-totB)} over`:`${fmt(totB-totS)} under budget. UNWELL`,`${ed} days till Europe. Wallet needs therapy`,pt>cur.inc?`Spending ${fmt(pt)}. Bank writing its will`:`Projected ${fmt(pt)} — wallet survives`],
-dark:[`${savR.toFixed(1)}% savings. Finances outlive you`,totD>0?`${fmt(totD)} debt. Collecting interest like Pokémon`:`Debt free. Die with dignity`,`${fmt(bp.amt)} at ${bp.desc}. Temporary happiness`,`${ed} days to Europe. Running with passport`,totS>totB?`${fmt(totS-totB)} over budget. Plan DOA`:`Under budget by ${fmt(totB-totS)}. Nothing reliable`],
-therapist:[savR>15?`${savR.toFixed(1)}% saved. Proud?`:`${savR.toFixed(1)}% savings. How does that FEEL?`,`${fmt(bp.amt)} at ${bp.desc}. Need or void?`,totS>totB?`Over ${fmt(totS-totB)}. Coping mechanisms?`:`Under budget. Growth. Gold star`,`${ed} days to Europe. Running... with passport`,totD>0?`${fmt(totD)} debt. IS about money`:`Debt free! Inner child healing`],
-hype:[`${savR.toFixed(1)}% SAVINGS LET'S GOOO`,`Dropped ${fmt(bp.amt)} at ${bp.desc}?! ICONIC`,totS>totB?`${fmt(totS-totB)} over budget YOLO`:`UNDER BUDGET?! FINANCIAL WEAPON`,`${ed} DAYS TO EUROPE!! PACK NOW!!`,totD>0?`Only ${fmt(totD)} debt?! Basically RICH`:`DEBT FREE!! GET A TROPHY`]};
+const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${debtPct}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,ed>0?`${ed} days to ${eLbl}`:`On track this month`,`Projected: ${fmt(pt)}`],
+unhinged:[savR>20?`${savR.toFixed(1)}% savings?? Who ARE you`:`${savR.toFixed(1)}% savings. Money fleeing`,`${fmt(bp.amt)} at ${bp.desc}. In THIS economy??`,totS>totB?`Budget obliterated. ${fmt(totS-totB)} over`:`${fmt(totB-totS)} under budget. UNWELL`,ed>0?`${ed} days till ${eLbl}. Wallet needs therapy`:`Wallet in survival mode`,pt>cur.inc?`Spending ${fmt(pt)}. Bank writing its will`:`Projected ${fmt(pt)} — wallet survives`],
+dark:[`${savR.toFixed(1)}% savings. Finances outlive you`,totD>0?`${fmt(totD)} debt. Collecting interest like Pokémon`:`Debt free. Die with dignity`,`${fmt(bp.amt)} at ${bp.desc}. Temporary happiness`,ed>0?`${ed} days to ${eLbl}. Running with passport`:`No escape plan. Embrace the void`,totS>totB?`${fmt(totS-totB)} over budget. Plan DOA`:`Under budget by ${fmt(totB-totS)}. Nothing reliable`],
+therapist:[savR>15?`${savR.toFixed(1)}% saved. Proud?`:`${savR.toFixed(1)}% savings. How does that FEEL?`,`${fmt(bp.amt)} at ${bp.desc}. Need or void?`,totS>totB?`Over ${fmt(totS-totB)}. Coping mechanisms?`:`Under budget. Growth. Gold star`,ed>0?`${ed} days to ${eLbl}. Running... with passport`:`No countdown. How does that feel?`,totD>0?`${fmt(totD)} debt. IS about money`:`Debt free! Inner child healing`],
+hype:[`${savR.toFixed(1)}% SAVINGS LET'S GOOO`,`Dropped ${fmt(bp.amt)} at ${bp.desc}?! ICONIC`,totS>totB?`${fmt(totS-totB)} over budget YOLO`:`UNDER BUDGET?! FINANCIAL WEAPON`,ed>0?`${ed} DAYS TO ${eLbl.toUpperCase()}!! PACK NOW!!`:`EVERY DAY IS A WIN!!`,totD>0?`Only ${fmt(totD)} debt?! Basically RICH`:`DEBT FREE!! GET A TROPHY`]};
 const v=P[persona]||P.pro;const ic=["💰","💳","📈","✈️","🔥"];const co=[savR>15?T.success:savR>5?T.warn:T.danger,T.success,T.purple,T.info,T.warn];
-return v.map((text,i)=>({icon:ic[i],text,color:co[i]}))},[persona,savR,totS,totB,totD,txns,cur,T,effectiveDay,dim]);
+return v.map((text,i)=>({icon:ic[i],text,color:co[i]}))},[persona,savR,totS,totB,totD,txns,cur,T,effectiveDay,dim,exitDate,exitLabel]);
 
 useEffect(()=>{const iv=setInterval(()=>setInsI(i=>(i+1)%insights.length),6000);return()=>clearInterval(iv)},[insights.length]);
 
@@ -2110,7 +2119,7 @@ try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({
 setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
-case"dash":return<DashPage T={T} accent={accent} setDashWidgets={setDashWidgets} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,history,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
+case"dash":return<DashPage T={T} accent={accent} setDashWidgets={setDashWidgets} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,history,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs,exitDate,exitLabel}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider} customSplits={customSplits} setCustomSplits={setCustomSplits} userCards={userCards} splitPartner={splitPartner} undoStack={undoStack} setUndoStack={setUndoStack}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
@@ -2176,6 +2185,14 @@ case"settings":return(
 <button onClick={()=>{const nc={...userCards};delete nc[k];setUserCards(nc)}} style={{background:"none",border:"none",color:T.danger,cursor:"pointer",opacity:.4}}><X size={10}/></button>
 </div>))}
 <button onClick={()=>{const name=prompt("Card name (e.g. Amex):");if(name){const id=name.toLowerCase().replace(/[^a-z0-9]/g,"");setUserCards(p=>({...p,[id]:name}))}}} style={{...btnS(T,false),fontSize:10,padding:"4px 10px"}}><Plus size={10}/>Add Card</button></div>
+<div style={{marginBottom:12}}>
+<div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Freedom Countdown</div>
+<div style={{display:"flex",gap:8,alignItems:"end"}}>
+<div style={{flex:1}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Exit date</div><input type="date" value={exitDate} onChange={e=>setExitDate(e.target.value)} style={{...inpS(T),fontSize:12}}/></div>
+<div style={{flex:1}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Label</div><input value={exitLabel} onChange={e=>setExitLabel(e.target.value)} placeholder="e.g. Europe, Retirement" style={{...inpS(T),fontSize:12}}/></div>
+</div>
+{!exitDate&&<div style={{fontSize:10,color:T.textMuted,marginTop:4}}>No exit date set — Freedom Countdown widget won't show</div>}
+</div>
 <div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Dashboard widgets</div>
 <div style={{fontSize:11,color:T.textMuted}}>Use the <strong>Customize</strong> button on the Dashboard to show/hide and reorder widgets.</div>
 </div>
