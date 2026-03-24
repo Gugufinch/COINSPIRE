@@ -68,7 +68,7 @@ const billId=(prefix,desc)=>`${prefix}_${(desc||"").toLowerCase().replace(/[^a-z
 const dimOf=mk=>{const p=mk.split("'");return new Date(2000+parseInt(p[1]),MO.indexOf(p[0])+1,0).getDate()};
 const CARD_MAP_DEFAULT={debit:"Debit",chase:"Chase",capitalone:"CapOne",amazon:"Amazon"};
 
-const HISTORY=[
+const GREG_HISTORY=[
 {m:"Oct'24",inc:4874,fix:1698,spend:2818,loans:31241,sav:1102,ira:0,stk:0,jnt:33573},
 {m:"Nov'24",inc:4837,fix:1772,spend:2573,loans:30881,sav:1472,ira:0,stk:0,jnt:31957},
 {m:"Dec'24",inc:4837,fix:1660,spend:2756,loans:30089,sav:2290,ira:0,stk:0,jnt:31196},
@@ -378,7 +378,7 @@ function StreaksW({txns,budget,day,T,debts}){
 const dailyB=budget/30;let streak=0;
 for(let d=day;d>=1;d--){const ds=txns.filter(t=>parseInt(t.d.split("-")[2])===d).reduce((s,t)=>s+t.amt,0);if(ds<=dailyB*1.5)streak++;else break}
 const debtsPaid=debts?debts.filter(d=>d.status==="paid").length:7;const debtsTotal=debts?debts.length:10;
-const trackMo=HISTORY.length;
+const trackMo=history.length||1;
 const st=[{icon:"🔥",l:"Budget Streak",v:`${streak}d`,s:`${streak} days in target`,c:T.success},
 {icon:"💳",l:"Debts Crushed",v:String(debtsPaid),s:`${debtsPaid} of ${debtsTotal} eliminated`,c:T.info},
 {icon:"📊",l:"Tracking",v:`${trackMo}mo`,s:"Consecutive months",c:T.purple}];
@@ -411,11 +411,11 @@ return(<div style={glass(T)}><div style={lbl(T)}>Daily Spending</div>
 // PAGES
 // ═══════════════════════════════════════════════════
 function DashPage({T,accent,data,qa,setQa,addQA,undoStack,undo}){
-const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc,debts,dashWidgets,userGoals,goalContribs}=data;
+const{cur,prev,nw,nwP,totS,totB,txns,day,dim,savR,totD,ins,insI,mOff,sideInc,debts,dashWidgets,userGoals,goalContribs,history}=data;
 const nwC=nwP!==0?((nw-nwP)/Math.abs(nwP)*100):0;
 const dC=prev.loans>0?((totD-prev.loans)/prev.loans*100):0;
 const totalSav=cur.sav+cur.ira+cur.stk+(cur.jnt);
-const avgBurn=HISTORY.slice(-6).reduce((s,h)=>s+h.spend+h.fix,0)/6;
+const avgBurn=history.length?history.slice(-6).reduce((s,h)=>s+h.spend+h.fix,0)/Math.min(history.length,6):0;
 return(<div>
 <div style={{...glass(T),marginBottom:14,display:"flex",gap:8,alignItems:"center"}}>
 <span style={{fontSize:16,color:T.textDim}}>$</span>
@@ -467,7 +467,7 @@ return<div style={{...glass(T),borderLeft:"3px solid "+T.info}}>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14,marginTop:14}}>
 <div style={glass(T)}><div style={lbl(T)}>Net Worth Trend</div>
 <ResponsiveContainer width="100%" height={180}>
-<AreaChart data={HISTORY.map(h=>({name:h.m,nw:(h.sav+h.ira+h.stk+h.jnt)-h.loans}))}>
+<AreaChart data={(history||[]).map(h=>({name:h.m,nw:(h.sav+h.ira+h.stk+h.jnt)-h.loans}))}>
 <defs><linearGradient id="nwG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.success} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={0}/></linearGradient></defs>
 <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
 <XAxis dataKey="name" tick={{fontSize:9,fill:T.textDim}} axisLine={false} tickLine={false}/>
@@ -481,6 +481,7 @@ const[filt,setFilt]=useState("");const[catF,setCatF]=useState("");const[cardF,se
 const[txnView,setTxnView]=useState("date");
 const[af,setAf]=useState({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});
 const[scanMode,setScanMode]=useState(false);const[scanImg,setScanImg]=useState(null);const[scanPreview,setScanPreview]=useState(null);
+const[calcMode,setCalcMode]=useState(false);const[calcItems,setCalcItems]=useState([{desc:"",amt:""}]);const[calcCard,setCalcCard]=useState("debit");const[calcDate,setCalcDate]=useState(new Date().toISOString().split("T")[0]);
 const[scanLoading,setScanLoading]=useState(false);const[scanResults,setScanResults]=useState(null);const[scanError,setScanError]=useState("");
 const[csvMode,setCsvMode]=useState(false);const[csvTxt,setCsvTxt]=useState("");const[csvBank,setCsvBank]=useState("chase");const[csvParsed,setCsvParsed]=useState([]);
 const[editCardId,setEditCardId]=useState(null);const[editCatId,setEditCatId]=useState(null);
@@ -560,7 +561,8 @@ return(<div>
 <select value={cardF} onChange={e=>setCardF(e.target.value)} style={{...inpS(T),width:"auto",fontSize:11,padding:"8px 12px"}}>
 <option value="">All Cards</option>{Object.entries(userCards).map(([k,v])=><option key={k} value={k}>{v}{byCard[k]?` (${fmt(byCard[k])})`:""}</option>)}</select></div>
 <div style={{display:"flex",gap:8}}>
-<button onClick={()=>{setScanMode(!scanMode);setShowAdd(false);setCsvMode(false)}} style={{...btnS(T,scanMode),background:scanMode?T.purple:undefined,color:scanMode?"#fff":T.text}}><Camera size={12}/>Scan</button>
+<button onClick={()=>{setScanMode(!scanMode);setShowAdd(false);setCsvMode(false);setCalcMode(false)}} style={{...btnS(T,scanMode),background:scanMode?T.purple:undefined,color:scanMode?"#fff":T.text}}><Camera size={12}/>Scan</button>
+<button onClick={()=>{setCalcMode(!calcMode);setShowAdd(false);setScanMode(false);setCsvMode(false)}} style={{...btnS(T,calcMode),background:calcMode?T.warn:undefined,color:calcMode?"#fff":T.text}}><Calculator size={12}/>Calc</button>
 <button onClick={()=>{setCsvMode(!csvMode);setShowAdd(false);setScanMode(false)}} style={{...btnS(T,csvMode),background:csvMode?T.info:undefined,color:csvMode?"#fff":T.text}}><Upload size={12}/>CSV</button>
 <button onClick={()=>{setShowAdd(!showAdd);setScanMode(false);setCsvMode(false)}} style={btnS(T,true)}><Plus size={12}/>Add</button>
 <button onClick={()=>{const h="Date,Description,Amount,Category,Card\n";const r=txns.map(t=>`${t.d},"${t.desc}",${t.amt},${t.cat},${t.card}`).join("\n");const b=new Blob([h+r],{type:"text/csv"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`coinspire_${mo}.csv`;a.click()}} style={btnS(T,false)}><Download size={12}/>Export</button></div></div>
@@ -626,6 +628,27 @@ return billMatches.length>0?<div style={{marginTop:8,padding:"8px 10px",backgrou
 {billMatches.slice(0,5).map((t,i)=><div key={i} style={{fontSize:10,padding:"2px 0",display:"flex",justifyContent:"space-between"}}>
 <span>{t.desc?.slice(0,30)}</span><span style={{color:T.info,fontWeight:600}}>{fmt(t.amt)}</span></div>)}</div>:null})()}
 </div>}</div>}
+
+{calcMode&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}><Calculator size={16} color={T.warn}/><span style={{fontSize:14,fontWeight:700}}>Bill Calculator</span></div>
+<button onClick={()=>setCalcMode(false)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={16}/></button></div>
+<div style={{display:"flex",gap:8,marginBottom:12}}>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Date</div><input type="date" value={calcDate} onChange={e=>setCalcDate(e.target.value)} style={{...inpS(T),fontSize:11,padding:"6px 8px",width:130}}/></div>
+<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Card</div><select value={calcCard} onChange={e=>setCalcCard(e.target.value)} style={{...inpS(T),fontSize:11,padding:"6px 8px",width:100}}>{Object.entries(userCards).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div></div>
+{calcItems.map((item,i)=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+<input value={item.desc} onChange={e=>{const n=[...calcItems];n[i].desc=e.target.value;setCalcItems(n)}} placeholder="Item name" style={{...inpS(T),fontSize:11,padding:"6px 8px",flex:2}}/>
+<div style={{position:"relative",width:80}}><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:T.textDim}}>$</span>
+<input type="number" value={item.amt} onChange={e=>{const n=[...calcItems];n[i].amt=e.target.value;setCalcItems(n)}} onKeyDown={e=>{if(e.key==="Enter"){setCalcItems(p=>[...p,{desc:"",amt:""}])}}} placeholder="0" style={{...inpS(T),fontSize:11,padding:"6px 8px 6px 20px",width:"100%",fontFamily:"'Space Mono',monospace",fontWeight:700}}/></div>
+<button onClick={()=>setCalcItems(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}}><X size={12}/></button></div>)}
+<button onClick={()=>setCalcItems(p=>[...p,{desc:"",amt:""}])} style={{...btnS(T,false),fontSize:10,marginBottom:12}}><Plus size={10}/>Add line</button>
+<div style={{borderTop:`2px solid ${T.border}`,paddingTop:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div><div style={{fontSize:10,color:T.textDim}}>{calcItems.filter(i=>+i.amt>0).length} items</div>
+<div style={{fontSize:24,fontWeight:900,fontFamily:"'Space Mono',monospace",color:T.danger}}>{fmt(calcItems.reduce((s,i)=>s+(+i.amt||0),0))}</div></div>
+<div style={{display:"flex",gap:6}}>
+<button onClick={()=>{const total=calcItems.reduce((s,i)=>s+(+i.amt||0),0);if(total>0){const desc=calcItems.filter(i=>i.desc).map(i=>i.desc).join(", ")||"Calculator total";addTxnsSmart([{id:Date.now(),d:calcDate,desc,amt:Math.round(total*100)/100,cat:autoCat(desc)||"misc",card:calcCard}]);setCalcItems([{desc:"",amt:""}]);setCalcMode(false)}}} style={{...btnS(T,true),background:T.success}}><Check size={12}/>Add as 1 Transaction</button>
+<button onClick={()=>{const items=calcItems.filter(i=>i.desc&&+i.amt>0);if(items.length>0){addTxnsSmart(items.map((it,idx)=>({id:Date.now()+idx,d:calcDate,desc:it.desc,amt:Math.round((+it.amt)*100)/100,cat:autoCat(it.desc)||"misc",card:calcCard})));setCalcItems([{desc:"",amt:""}]);setCalcMode(false)}}} style={btnS(T,false)}><List size={12}/>Add Each Item</button>
+</div></div></div>}
 
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
@@ -1372,8 +1395,8 @@ return(<div>
 <Bar dataKey="value" radius={[4,4,0,0]}>{assets.map((a,i)=><Cell key={i} fill={a.color}/>)}</Bar></BarChart></ResponsiveContainer></div>}
 </div>)}
 
-function NWPage({T,bal,cur}){
-const nwData=HISTORY.map(h=>{const nw=(h.sav+h.ira+h.stk+h.jnt)-h.loans;return{name:h.m,nw,assets:h.sav+h.ira+h.stk+h.jnt,debt:h.loans}});
+function NWPage({T,bal,cur,history}){
+const nwData=(history||[]).map(h=>{const nw=(h.sav+h.ira+h.stk+h.jnt)-h.loans;return{name:h.m,nw,assets:h.sav+h.ira+h.stk+h.jnt,debt:h.loans}});
 const curNW=nwData[nwData.length-1]?.nw||0;const firstNW=nwData[0]?.nw||0;
 const totalGain=curNW-firstNW;const avgGain=totalGain/Math.max(1,nwData.length);
 const peak=Math.max(...nwData.map(d=>d.nw));
@@ -1398,10 +1421,10 @@ return(<div>
 <Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v)]}/>
 <Bar dataKey="assets" fill={T.success} name="Assets" radius={[4,4,0,0]}/><Bar dataKey="debt" fill={T.danger} name="Debt" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div></div>)}
 
-function GoalsPage({T,userGoals,setUserGoals,goalContribs,setGoalContribs,cur,totalDebt}){
+function GoalsPage({T,userGoals,setUserGoals,goalContribs,setGoalContribs,cur,totalDebt,history}){
 const euroT=8000;const euroS=2400;const euroDate=new Date(2026,7,1);const now=new Date();
 const euroDays=Math.max(0,Math.ceil((euroDate-now)/86400000));
-const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:HISTORY[0].loans||31241,icon:"🏆",inv:true},
+const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:history?.length?history[0].loans||1:1,icon:"🏆",inv:true},
 {id:"europe",name:"Europe Trip",cur:euroS,max:euroT,icon:"✈️"},{id:"ira",name:"IRA Max",cur:cur.ira,max:7000,icon:"📈"},
 {id:"emerg",name:"Emergency Fund",cur:cur.sav+(cur.jnt),max:10000,icon:"🛡️"}];
 const gl=userGoals||defaultGoals.map(g=>({id:g.id,name:g.name,max:g.max,icon:g.icon}));
@@ -1874,13 +1897,7 @@ const mob=winW<768;const T=THEMES[theme];const accent=ACCENTS[acI];
 // Load/Save
 const FRESH_BAL={sav:0,ira:0,stk:0,jnt:0,inc:0,fix:0};
 const GREG_BAL={sav:313,ira:3194,stk:1376,jnt:49966,inc:5656,fix:1780};
-useEffect(()=>{savingGate.current=true;setLoaded(false);(async()=>{
-// Reset to clean defaults first
-const isGreg=activeUser==="greg";
-setMonths({[curMK]:{txns:isGreg?SAMPLE_TXNS:[],budgets:(isGreg?DEFAULT_CATS:BLANK_CATS).map(c=>({...c}))}});
-setMo(curMK);setBal(isGreg?GREG_BAL:{...FRESH_BAL});
-setDebts(isGreg?DEBTS_DEFAULT:[]);setSubs(isGreg?SUBS_DEFAULT:[]);
-setRecurring(isGreg?[
+const GREG_RECURRING=[
 {desc:"Rent",amt:1200,cat:"misc",kind:"fixed",group:"Housing",due:1},
 {desc:"Insurance",amt:10,cat:"misc",kind:"fixed",group:"Housing",due:1},
 {desc:"BCU Loan",amt:345,cat:"loan",kind:"fixed",group:"Loans",due:18},
@@ -1896,25 +1913,61 @@ setRecurring(isGreg?[
 {desc:"Groceries",amt:500,cat:"groceries",kind:"variable",group:"Groceries",due:0},
 {desc:"Electric",amt:50,cat:"electric",kind:"variable",group:"Utilities",due:20},
 {desc:"Gas",amt:15,cat:"gas",kind:"variable",group:"Utilities",due:20},
-{desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation",due:0}]:[]);
+{desc:"Transport",amt:125,cat:"transport",kind:"variable",group:"Transportation",due:0}];
+const GREG_GOALS=[{id:"europe",name:"Europe Trip",max:8000,icon:"✈️"},{id:"ira",name:"IRA Max",max:7000,icon:"📈"},{id:"emerg",name:"Emergency Fund",max:10000,icon:"🛡️"},{id:"debt",name:"Debt Free",max:6897,icon:"🏆"}];
+const GREG_GOAL_CONTRIBS={europe:[{amt:2400,date:"2026-01-01",note:"Starting balance"}]};
+
+useEffect(()=>{savingGate.current=true;setLoaded(false);(async()=>{
+const isGreg=activeUser==="greg";
+// LOAD FIRST — only fall back to defaults if no saved data
+const d=await ldData(activeUser);
+if(d){
+// Apply saved data
+d.months?setMonths(d.months):setMonths({[curMK]:{txns:[],budgets:(isGreg?DEFAULT_CATS:BLANK_CATS).map(c=>({...c}))}});
+d.mo?setMo(d.mo):setMo(curMK);
+d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);
+d.bal?setBal(d.bal):setBal(isGreg?GREG_BAL:{...FRESH_BAL});
+d.debts?setDebts(d.debts):setDebts(isGreg?DEBTS_DEFAULT:[]);
+d.subs?setSubs(d.subs):setSubs(isGreg?SUBS_DEFAULT:[]);
+d.persona&&setPersona(d.persona);
+d.sideIncome!==undefined&&setSideIncome(d.sideIncome);
+d.apiKey&&setApiKey(d.apiKey);
+d.cScores&&setCScores(d.cScores);
+d.userGoals?setUserGoals(d.userGoals):setUserGoals(isGreg?GREG_GOALS:null);
+d.goalContribs?setGoalContribs(d.goalContribs):setGoalContribs(isGreg?GREG_GOAL_CONTRIBS:{});
+d.aiModel&&setAiModel(d.aiModel);
+d.userEmojis&&setUserEmojis(d.userEmojis);
+d.aiProvider&&setAiProvider(d.aiProvider);
+d.recurring?setRecurring(d.recurring):setRecurring(isGreg?GREG_RECURRING:[]);
+d.billsPaid?setBillsPaid(d.billsPaid):setBillsPaid({});
+d.billActuals?setBillActuals(d.billActuals):setBillActuals({});
+d.splits?setSplits(d.splits):setSplits({});
+d.customSplits?setCustomSplits(d.customSplits):setCustomSplits({});
+d.recurringSplits?setRecurringSplits(d.recurringSplits):setRecurringSplits([]);
+d.varCap!=null?setVarCap(d.varCap):setVarCap(isGreg?690:0);
+d.onboarded!=null?setOnboarded(d.onboarded):setOnboarded(isGreg);
+d.userCards?setUserCards(d.userCards):setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});
+d.splitPartner?setSplitPartner(d.splitPartner):setSplitPartner(isGreg?"Sarah":"Partner");
+if(d.dashWidgets){const dw={...d.dashWidgets};if(dw.featuredGoal===undefined)dw.featuredGoal=true;setDashWidgets(dw)}else setDashWidgets({whatsLeft:true,featuredGoal:true});
+d.savAccounts&&setSavAccounts(d.savAccounts);
+}else{
+// No saved data — fresh user gets clean defaults, Greg gets his
+setMonths({[curMK]:{txns:isGreg?SAMPLE_TXNS:[],budgets:(isGreg?DEFAULT_CATS:BLANK_CATS).map(c=>({...c}))}});
+setMo(curMK);setBal(isGreg?GREG_BAL:{...FRESH_BAL});
+setDebts(isGreg?DEBTS_DEFAULT:[]);setSubs(isGreg?SUBS_DEFAULT:[]);
+setRecurring(isGreg?GREG_RECURRING:[]);
 setSideIncome(0);setApiKey("");setCScores([]);
-setUserGoals(isGreg?[{id:"europe",name:"Europe Trip",max:8000,icon:"✈️"},{id:"ira",name:"IRA Max",max:7000,icon:"📈"},{id:"emerg",name:"Emergency Fund",max:10000,icon:"🛡️"},{id:"debt",name:"Debt Free",max:6897,icon:"🏆"}]:null);
-setGoalContribs(isGreg?{europe:[{amt:2400,date:"2026-01-01",note:"Starting balance"}]}:{});
+setUserGoals(isGreg?GREG_GOALS:null);
+setGoalContribs(isGreg?GREG_GOAL_CONTRIBS:{});
 setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
-setOnboarded(isGreg?true:false);setPersona("pro");setAiChat([]);setTab("dash");
-setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");setDashWidgets({whatsLeft:true,featuredGoal:true});setUndoStack([]);setSavAccounts(isGreg?null:null);
-// Then load saved data on top
-const d=await ldData(activeUser);if(d){d.months&&setMonths(d.months);d.mo&&setMo(d.mo);d.theme&&setTheme(d.theme);d.acI!==undefined&&setAcI(d.acI);d.bal&&setBal(d.bal);d.debts&&setDebts(d.debts);d.subs&&setSubs(d.subs);d.persona&&setPersona(d.persona);if(d.sideIncome!==undefined)setSideIncome(d.sideIncome);if(d.apiKey)setApiKey(d.apiKey);if(d.cScores)setCScores(d.cScores);if(d.userGoals)setUserGoals(d.userGoals);if(d.goalContribs)setGoalContribs(d.goalContribs);if(d.aiModel)setAiModel(d.aiModel);if(d.userEmojis)setUserEmojis(d.userEmojis);if(d.aiProvider)setAiProvider(d.aiProvider);if(d.recurring)setRecurring(d.recurring);if(d.billsPaid)setBillsPaid(d.billsPaid);if(d.billActuals)setBillActuals(d.billActuals);if(d.splits)setSplits(d.splits);if(d.customSplits)setCustomSplits(d.customSplits);if(d.recurringSplits)setRecurringSplits(d.recurringSplits);if(d.varCap!=null)setVarCap(d.varCap);if(d.onboarded!=null)setOnboarded(d.onboarded);
-// Migration: apply new fields from saved data, or keep reset defaults
-if(d.userCards)setUserCards(d.userCards);
-if(d.splitPartner)setSplitPartner(d.splitPartner);
-if(d.dashWidgets){
-// Migrate old format: add featuredGoal if missing
-const dw={...d.dashWidgets};if(dw.featuredGoal===undefined)dw.featuredGoal=true;
-setDashWidgets(dw)}
-if(d.savAccounts)setSavAccounts(d.savAccounts)}setLoaded(true);setTimeout(()=>{savingGate.current=false},100)})()},[activeUser]);
+setOnboarded(isGreg);setPersona("pro");setTab("dash");
+setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");setDashWidgets({whatsLeft:true,featuredGoal:true});setSavAccounts(null);
+}
+setUndoStack([]);setAiChat([]);
+setLoaded(true);setTimeout(()=>{savingGate.current=false},300)})()},[activeUser]);
 useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts]);
 
+const history=activeUser==="greg"?GREG_HISTORY:[];
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
 const billNames=useMemo(()=>{const names=new Set();recurring.forEach(r=>names.add(r.desc.toLowerCase()));subs.forEach(s=>{if(s.n)names.add(s.n.toLowerCase())});return names},[recurring,subs]);
 const txns=useMemo(()=>txnsRaw.map(t=>{if(t.isBill)return t;if(billNames.has(t.desc.toLowerCase())||billNames.has(t.desc.replace(/ \(Greg \d+%\)| \(Sarah \d+%\)/,"").toLowerCase()))return{...t,isBill:true};return t}),[txnsRaw,billNames]);
@@ -1946,8 +1999,8 @@ else if(Math.random()<0.08)showToast(["💰","🪙","📊","✨","🎯"][Math.fl
 ["Money tracked is money managed","Every dollar accounted for","Building that financial awareness","Data is power","One step closer to freedom"][Math.floor(Math.random()*5)],T.success)};
 
 const totD=debts.reduce((s,d)=>s+(d.bal||0),0);const spendTxns=txns.filter(t=>!t.isBill);const totS=spendTxns.reduce((s,t)=>s+t.amt,0);const totB=cats.reduce((s,c)=>s+c.budget,0);const billTxns=txns.filter(t=>t.isBill);const totBills=billTxns.reduce((s,t)=>s+t.amt,0);
-const cur={...HISTORY[HISTORY.length-1],sav:bal.sav,ira:bal.ira,stk:bal.stk,jnt:bal.jnt,inc:bal.inc,fix:bal.fix,loans:totD};
-const prev=HISTORY[HISTORY.length-2];
+const cur={...(history.length?history[history.length-1]:{m:"",inc:0,fix:0,spend:0,loans:0,sav:0,ira:0,stk:0,jnt:0}),sav:bal.sav,ira:bal.ira,stk:bal.stk,jnt:bal.jnt,inc:bal.inc,fix:bal.fix,loans:totD};
+const prev=history.length>1?history[history.length-2]:cur;
 const nw=(cur.sav+cur.ira+cur.stk+cur.jnt)-cur.loans;
 const nwP=(prev.sav+prev.ira+prev.stk+prev.jnt)-prev.loans;
 const savR=cur.inc>0?((cur.inc-cur.fix-totS)/cur.inc*100):0;
@@ -1965,7 +2018,8 @@ const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]
 const insights=useMemo(()=>{
 const bp=txns.filter(t=>!t.isBill).reduce((mx,t)=>t.amt>mx.amt?t:mx,{amt:0,desc:"-"});const pt=(totS/Math.max(effectiveDay,1))*dim;
 const ed=Math.max(0,Math.ceil((new Date(2026,7,1)-now)/86400000));
-const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${(((HISTORY[0].loans||31241)-totD)/(HISTORY[0].loans||31241)*100).toFixed(0)}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,`${ed} days to Europe`,`Projected: ${fmt(pt)}`],
+const debtPct=history.length&&history[0].loans?Math.round((history[0].loans-totD)/history[0].loans*100):0;
+const P={pro:[`Savings rate: ${savR.toFixed(1)}%`,`Debt: ${debtPct}% eliminated`,`IRA: ${((cur.ira/7000)*100).toFixed(0)}% of max`,`${ed} days to Europe`,`Projected: ${fmt(pt)}`],
 unhinged:[savR>20?`${savR.toFixed(1)}% savings?? Who ARE you`:`${savR.toFixed(1)}% savings. Money fleeing`,`${fmt(bp.amt)} at ${bp.desc}. In THIS economy??`,totS>totB?`Budget obliterated. ${fmt(totS-totB)} over`:`${fmt(totB-totS)} under budget. UNWELL`,`${ed} days till Europe. Wallet needs therapy`,pt>cur.inc?`Spending ${fmt(pt)}. Bank writing its will`:`Projected ${fmt(pt)} — wallet survives`],
 dark:[`${savR.toFixed(1)}% savings. Finances outlive you`,totD>0?`${fmt(totD)} debt. Collecting interest like Pokémon`:`Debt free. Die with dignity`,`${fmt(bp.amt)} at ${bp.desc}. Temporary happiness`,`${ed} days to Europe. Running with passport`,totS>totB?`${fmt(totS-totB)} over budget. Plan DOA`:`Under budget by ${fmt(totB-totS)}. Nothing reliable`],
 therapist:[savR>15?`${savR.toFixed(1)}% saved. Proud?`:`${savR.toFixed(1)}% savings. How does that FEEL?`,`${fmt(bp.amt)} at ${bp.desc}. Need or void?`,totS>totB?`Over ${fmt(totS-totB)}. Coping mechanisms?`:`Under budget. Growth. Gold star`,`${ed} days to Europe. Running... with passport`,totD>0?`${fmt(totD)} debt. IS about money`:`Debt free! Inner child healing`],
@@ -2003,15 +2057,15 @@ try{const text=await callAI({system:sys,messages:[...aiChat.slice(-10).map(m=>({
 setAiChat(p=>[...p,{role:"ai",text:text||"No response."}])}catch(err){setAiChat(p=>[...p,{role:"ai",text:"Error: "+(err.message||"Check Settings")}])}setAiLoading(false)};
 
 const renderPage=()=>{switch(tab){
-case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
+case"dash":return<DashPage T={T} accent={accent} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,history,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider} customSplits={customSplits} setCustomSplits={setCustomSplits} userCards={userCards} splitPartner={splitPartner} undoStack={undoStack} setUndoStack={setUndoStack}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
 case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
 case"sav":return<SavingsPage T={T} bal={bal} setBal={setBal} cur={cur} savAccounts={savAccounts} setSavAccounts={setSavAccounts}/>;
 case"sub":return<BillsPage T={T} splitPartner={splitPartner} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal} varCap={varCap} setVarCap={setVarCap}/>;
 case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} customSplits={customSplits} setCustomSplits={setCustomSplits} recurringSplits={recurringSplits} setRecurringSplits={setRecurringSplits} mo={mo} billsPaid={billsPaid} billActuals={billActuals} splitPartner={splitPartner}/>;
-case"nwt":return<NWPage T={T} bal={bal} cur={cur}/>;
-case"goals":return<GoalsPage T={T} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
+case"nwt":return<NWPage T={T} bal={bal} cur={cur} history={history}/>;
+case"goals":return<GoalsPage T={T} history={history} userGoals={userGoals} setUserGoals={setUserGoals} goalContribs={goalContribs} setGoalContribs={setGoalContribs} cur={cur} totalDebt={totD}/>;
 case"report":return<ReportPage T={T} cats={cats} byCat={byCat} totS={totS} totB={totB} savR={savR}/>;
 case"credit":return<CreditPage T={T} cScores={cScores} setCScores={setCScores} csForm={csForm} setCsForm={setCsForm}/>;
 case"cal":return<CalPage T={T} months={months} calMo={calMo} setCalMo={setCalMo} calYr={calYr} setCalYr={setCalYr} recurring={recurring} billsPaid={billsPaid}/>;
@@ -2136,9 +2190,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 <div style={{padding:"0 18px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:`1px solid ${T.border}`}}>
 <img src={LOGO} alt="" style={{width:30,height:30,borderRadius:8}}/><span style={{fontSize:16,fontWeight:800}}>Coinspire</span>
 <button onClick={()=>setSideOpen(false)} style={{marginLeft:"auto",background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}><X size={18}/></button></div>
-{NAV.map(item=>{const act=tab===item.id;return(
+{Object.entries(SECS).map(([sec,sl])=>{const items=NAV.filter(n=>n.sec===sec);if(!items.length)return null;return(
+<div key={sec}>{sl&&<div style={{padding:"12px 18px 4px",fontSize:9,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>{sl}</div>}
+{items.map(item=>{const act=tab===item.id;return(
 <button key={item.id} onClick={()=>{setTab(item.id);setSideOpen(false)}} style={{width:"100%",padding:"11px 18px",display:"flex",alignItems:"center",gap:10,background:act?accent+"12":"transparent",border:"none",borderLeft:act?`3px solid ${accent}`:"3px solid transparent",color:act?accent:T.textMuted,cursor:"pointer",fontSize:13,fontWeight:act?700:500}}>
-<item.icon size={16}/>{item.label}</button>)})}</nav></div>}
+<item.icon size={16}/>{item.label}</button>)})}</div>)})}</nav></div>}
 
 {/* 🏆 Achievement Toast */}
 {toast&&<div style={{position:"fixed",top:20,right:20,zIndex:200,background:T.card,border:`1px solid ${toast.color}40`,borderRadius:16,padding:"14px 20px",display:"flex",alignItems:"center",gap:12,boxShadow:`0 8px 32px ${toast.color}20`,animation:"toastIn .4s ease",maxWidth:340}}>
