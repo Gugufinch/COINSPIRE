@@ -612,9 +612,9 @@ return(<div>
 <select value={cardF} onChange={e=>setCardF(e.target.value)} style={{...inpS(T),width:"auto",fontSize:11,padding:"8px 12px"}}>
 <option value="">All Cards</option>{Object.entries(userCards).map(([k,v])=><option key={k} value={k}>{v}{byCard[k]?` (${fmt(byCard[k])})`:""}</option>)}</select></div>
 <div style={{display:"flex",gap:8}}>
-<button onClick={()=>{setScanMode(!scanMode);setShowAdd(false);setCsvMode(false);setCalcMode(false)}} style={{...btnS(T,scanMode),background:scanMode?T.purple:undefined,color:scanMode?"#fff":T.text}}><Camera size={12}/>Scan</button>
-<button onClick={()=>{setCalcMode(!calcMode);setShowAdd(false);setScanMode(false);setCsvMode(false)}} style={{...btnS(T,calcMode),background:calcMode?T.warn:undefined,color:calcMode?"#fff":T.text}}><Calculator size={12}/>Calc</button>
-<button onClick={()=>{setCsvMode(!csvMode);setShowAdd(false);setScanMode(false)}} style={{...btnS(T,csvMode),background:csvMode?T.info:undefined,color:csvMode?"#fff":T.text}}><Upload size={12}/>CSV</button>
+<button onClick={()=>{setScanMode(!scanMode);setShowAdd(false);setCsvMode(false);setCalcMode(false)}} style={{...btnS(T,false),...(scanMode?{background:T.purple,color:"#fff",borderColor:T.purple}:{})}}><Camera size={12}/>Scan</button>
+<button onClick={()=>{setCalcMode(!calcMode);setShowAdd(false);setScanMode(false);setCsvMode(false)}} style={{...btnS(T,false),...(calcMode?{background:T.warn,color:"#fff",borderColor:T.warn}:{})}}><Calculator size={12}/>Calc</button>
+<button onClick={()=>{setCsvMode(!csvMode);setShowAdd(false);setScanMode(false)}} style={{...btnS(T,false),...(csvMode?{background:T.info,color:"#fff",borderColor:T.info}:{})}}><Upload size={12}/>CSV</button>
 <button onClick={()=>{setShowAdd(!showAdd);setScanMode(false);setCsvMode(false)}} style={btnS(T,true)}><Plus size={12}/>Add</button>
 <button onClick={()=>{const h="Date,Description,Amount,Category,Card\n";const r=txns.map(t=>`${t.d},"${t.desc}",${t.amt},${t.cat},${t.card}`).join("\n");const b=new Blob([h+r],{type:"text/csv"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`coinspire_${mo}.csv`;a.click()}} style={btnS(T,false)}><Download size={12}/>Export</button></div></div>
 
@@ -1473,12 +1473,16 @@ return(<div>
 <Bar dataKey="assets" fill={T.success} name="Assets" radius={[4,4,0,0]}/><Bar dataKey="debt" fill={T.danger} name="Debt" radius={[4,4,0,0]}/></BarChart></ResponsiveContainer></div></div>)}
 
 function GoalsPage({T,userGoals,setUserGoals,goalContribs,setGoalContribs,cur,totalDebt,history}){
-const euroT=8000;const euroS=2400;const euroDate=new Date(2026,7,1);const now=new Date();
-const euroDays=Math.max(0,Math.ceil((euroDate-now)/86400000));
+const now=new Date();
+// defaultGoals only provides the auto-computed `cur` for goals that already
+// exist in userGoals (matched by id). It is NOT a fallback list — empty
+// userGoals means the user has no goals yet, period. Greg's pre-existing
+// goals (europe/ira/emerg/debt) keep their auto-computed currents because
+// his GREG_GOALS already populates userGoals with those ids.
 const defaultGoals=[{id:"debt",name:"Debt Free",cur:totalDebt,max:history?.length?history[0].loans||1:1,icon:"🏆",inv:true},
-{id:"europe",name:"Europe Trip",cur:euroS,max:euroT,icon:"✈️"},{id:"ira",name:"IRA Max",cur:cur.ira,max:7000,icon:"📈"},
+{id:"ira",name:"IRA Max",cur:cur.ira,max:7000,icon:"📈"},
 {id:"emerg",name:"Emergency Fund",cur:cur.sav+(cur.jnt),max:10000,icon:"🛡️"}];
-const gl=userGoals||defaultGoals.map(g=>({id:g.id,name:g.name,max:g.max,icon:g.icon}));
+const gl=userGoals||[];
 const totalContrib=gid=>(goalContribs[gid]||[]).reduce((s,c)=>s+c.amt,0);
 const[editId,setEditId]=useState(null);const[ef,setEf]=useState({});
 const[addOpen,setAddOpen]=useState(false);const[nf,setNf]=useState({name:"",max:"",icon:"🎯"});
@@ -1507,6 +1511,11 @@ return(<div>
 <div style={{width:100}}><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Goal $</div><input type="number" placeholder="10000" value={nf.max} onChange={e=>setNf(p=>({...p,max:e.target.value}))} style={{...inpS(T),fontSize:12}}/></div>
 <button onClick={addGoal} style={btnS(T,true)}><Check size={12}/></button></div></div>}
 
+{gl.length===0&&!addOpen&&<div style={{...glass(T),textAlign:"center",padding:"40px 20px"}}>
+<div style={{fontSize:48,marginBottom:12,opacity:.5}}>🎯</div>
+<div style={{fontSize:16,fontWeight:700,marginBottom:6}}>No goals yet</div>
+<div style={{fontSize:12,color:T.textDim,marginBottom:16}}>Save for a trip, build an emergency fund, pay off debt — whatever matters to you.</div>
+<button onClick={()=>setAddOpen(true)} style={{...btnS(T,true),margin:"0 auto"}}><Plus size={12}/>Create your first goal</button></div>}
 {gl.map(g=>{const dg=defaultGoals.find(d=>d.id===g.id);const curVal=dg?dg.cur:totalContrib(g.id);const max=g.max||dg?.max||1;
 const pct=g.id==="debt"?((max-curVal)/max*100):Math.min(curVal/max*100,999);const contribs=goalContribs[g.id]||[];const toGo=g.id==="debt"?curVal:Math.max(max-curVal,0);
 const isEditing=editId===g.id;
@@ -1693,6 +1702,8 @@ const[inc,setInc]=useState("");
 const[fix,setFix]=useState("");
 const[bills,setBills]=useState([{desc:"",amt:"",kind:"fixed",due:""}]);
 const[varCap,setVCap]=useState("");
+const[varMode,setVarMode]=useState("cap");
+const[varItems,setVarItems]=useState([{desc:"Groceries",amt:""},{desc:"Gas",amt:""},{desc:"Eating out",amt:""}]);
 const[cats,setCatsLocal]=useState([
 {id:"groceries",name:"Groceries",budget:"",icon:"🛒"},{id:"rec",name:"Fun/Dining",budget:"",icon:"🎉"},
 {id:"shop",name:"Shopping",budget:"",icon:"🛍️"},{id:"transport",name:"Transport",budget:"",icon:"🚗"},
@@ -1700,28 +1711,37 @@ const[cats,setCatsLocal]=useState([
 const[goals,setGoals]=useState([{name:"",target:"",icon:"🎯"}]);
 const[cards,setCards]=useState([{id:"debit",name:"Debit"}]);
 const[partner,setPartner]=useState("");
+const[aiKey,setAiKey]=useState("");
+const[aiProv,setAiProv]=useState("anthropic");
 
 const addBill=()=>setBills(p=>[...p,{desc:"",amt:"",kind:"fixed",due:""}]);
 const addGoal=()=>setGoals(p=>[...p,{name:"",target:"",icon:"🎯"}]);
 const addCat=()=>setCatsLocal(p=>[...p,{id:"c"+Date.now(),name:"",budget:"",icon:"📦"}]);
 const addCard=()=>setCards(p=>[...p,{id:"c"+Date.now(),name:""}]);
+const addVarItem=()=>setVarItems(p=>[...p,{desc:"",amt:""}]);
+const itemizedTotal=varItems.reduce((s,v)=>s+(+v.amt||0),0);
+const effectiveVarCap=varMode==="itemize"?itemizedTotal:(+varCap||0);
 
 const finish=()=>{
-const income=+inc||0;const fixed=+fix||0;const vCap=+varCap||0;
+const income=+inc||0;const fixed=+fix||0;
+const vCap=effectiveVarCap;
 const finalBills=bills.filter(b=>b.desc&&b.amt).map(b=>({desc:b.desc,amt:+b.amt,cat:"misc",kind:b.kind||"fixed",group:"Bills",due:+b.due||0}));
+// Itemized variables become "variable" recurring entries so they show up in Bills page
+const itemizedRecurring=varMode==="itemize"?varItems.filter(v=>v.desc&&v.amt).map(v=>({desc:v.desc,amt:+v.amt,cat:"misc",kind:"variable",group:"Variable",due:0})):[];
 const finalCats=cats.filter(c=>c.name).map(c=>({...c,budget:+c.budget||0}));
 const finalGoals=goals.filter(g=>g.name&&g.target).map(g=>({id:"g"+Date.now()+Math.random(),name:g.name,max:+g.target,icon:g.icon}));
 const finalCards={};cards.filter(c=>c.name).forEach(c=>{finalCards[c.name.toLowerCase().replace(/[^a-z0-9]/g,"")]=c.name});
-onComplete({income,fixed,varCap:vCap,bills:finalBills,cats:finalCats,goals:finalGoals,cards:finalCards,partner:partner||"Partner"})};
+onComplete({income,fixed,varCap:vCap,bills:[...finalBills,...itemizedRecurring],cats:finalCats,goals:finalGoals,cards:finalCards,partner:partner||"Partner",aiKey:aiKey.trim(),aiProv})};
 
 const steps=[
 {title:"Welcome to Coinspire!",sub:`Let's set up your finances, ${userName}. This takes about 2 minutes.`},
 {title:"What's your monthly income?",sub:"After taxes \u2014 what hits your bank account each month."},
-{title:"What are your fixed bills?",sub:"Rent, subscriptions, loans \u2014 stuff that's the same every month."},
-{title:"Variable expenses",sub:"Things that change monthly \u2014 groceries, gas, electric. Set a cap for all of them."},
+{title:"What are your fixed bills?",sub:"Rent, subscriptions, loans \u2014 stuff that's the same every month. Skip if you'd rather add later."},
+{title:"Variable expenses",sub:"Things that change monthly \u2014 groceries, gas, electric. Set one cap or itemize each."},
 {title:"Budget categories",sub:"How do you want to divide your spending money?"},
 {title:"Any savings goals?",sub:"What are you working toward?"},
 {title:"Cards & Partner",sub:"What payment cards do you use? Split expenses with someone?"},
+{title:"AI features (optional)",sub:"Receipt scanning + AI advisor need an API key. Skip and add later in Settings if you'd rather."},
 {title:"You're all set!",sub:"Let's start tracking."}
 ];
 
@@ -1732,6 +1752,7 @@ if(step===3)return true;
 if(step===4)return cats.some(c=>c.name);
 if(step===5)return true;
 if(step===6)return cards.some(c=>c.name);
+if(step===7)return true;
 return true};
 
 const st={...glass(T),maxWidth:520,width:"100%",animation:"fadeUp .3s ease"};
@@ -1753,7 +1774,7 @@ return(<div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:
 {step===0&&<div style={{textAlign:"center",padding:20}}>
 <div style={{fontSize:64,marginBottom:16}}>💰</div>
 <div style={{fontSize:14,color:T.textMuted,lineHeight:1.6}}>
-Coinspire helps you track spending, manage bills, split costs with partners, and hit your savings goals. Everything stays on your device \u2014 your data, your rules.</div></div>}
+Coinspire helps you track spending, manage bills, split costs with partners, and hit your savings goals. Everything stays on your device — your data, your rules.</div></div>}
 
 {step===1&&<div>
 <div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Monthly take-home pay</div>
@@ -1762,7 +1783,7 @@ Coinspire helps you track spending, manage bills, split costs with partners, and
 <input type="number" value={inc} onChange={e=>setInc(e.target.value)} placeholder="0" style={{...inpS(T),fontSize:28,fontFamily:"'Space Mono',monospace",fontWeight:800,padding:"14px 16px"}} autoFocus/>
 </div>
 {+inc>0&&<div style={{marginTop:16,padding:12,background:T.successBg,borderRadius:10}}>
-<div style={{fontSize:12,color:T.success,fontWeight:600}}>✨ {fmt(+inc)}/month \u2014 let's make every dollar count</div></div>}
+<div style={{fontSize:12,color:T.success,fontWeight:600}}>✨ {fmt(+inc)}/month — let's make every dollar count</div></div>}
 </div>}
 
 {step===2&&<div>
@@ -1780,13 +1801,27 @@ Fixed total: <strong>{fmt(bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0))
 </div>}
 
 {step===3&&<div>
-<div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Monthly cap for all variable expenses</div>
+<div style={{display:"flex",gap:6,marginBottom:14,padding:4,background:T.bg,borderRadius:10,border:`1px solid ${T.border}`,width:"fit-content"}}>
+<button onClick={()=>setVarMode("cap")} style={{padding:"6px 14px",borderRadius:6,border:"none",background:varMode==="cap"?T.success:"transparent",color:varMode==="cap"?"#080c18":T.textMuted,fontSize:11,fontWeight:700,cursor:"pointer"}}>Single Cap</button>
+<button onClick={()=>setVarMode("itemize")} style={{padding:"6px 14px",borderRadius:6,border:"none",background:varMode==="itemize"?T.success:"transparent",color:varMode==="itemize"?"#080c18":T.textMuted,fontSize:11,fontWeight:700,cursor:"pointer"}}>Itemize Each</button>
+</div>
+{varMode==="cap"?(<div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:4}}>One total cap covers all variable spending</div>
 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
 <span style={{fontSize:16,color:T.textDim}}>$</span>
-<input type="number" value={varCap} onChange={e=>setVCap(e.target.value)} placeholder="500" style={{...inpS(T),fontSize:20,fontFamily:"'Space Mono',monospace",fontWeight:700}} autoFocus/>
-</div>
-{+inc>0&&+varCap>0&&<div style={{padding:12,background:T.infoBg,borderRadius:10}}>
-<div style={{fontSize:12,color:T.info}}>After fixed bills ({fmt(bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0))}) + variable cap ({fmt(+varCap)}): <strong style={{color:T.success}}>{fmt(+inc-bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0)-(+varCap))}</strong> left for spending</div></div>}
+<input type="number" value={varCap} onChange={e=>setVCap(e.target.value)} placeholder="500 (or skip)" style={{...inpS(T),fontSize:20,fontFamily:"'Space Mono',monospace",fontWeight:700}} autoFocus/>
+</div></div>):(<div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:8}}>Each variable expense gets its own monthly cap</div>
+{varItems.map((v,i)=><div key={i} style={row}>
+<div style={{flex:2}}><input value={v.desc} onChange={e=>{const n=[...varItems];n[i].desc=e.target.value;setVarItems(n)}} placeholder="Groceries, gas..." style={{...inpS(T),fontSize:12}}/></div>
+<div style={{width:90}}><input type="number" value={v.amt} onChange={e=>{const n=[...varItems];n[i].amt=e.target.value;setVarItems(n)}} placeholder="$" style={{...inpS(T),fontSize:12}}/></div>
+<button onClick={()=>setVarItems(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer"}}><X size={14}/></button>
+</div>)}
+<button onClick={addVarItem} style={{...btnS(T,false),fontSize:11,marginBottom:12}}><Plus size={10}/>Add item</button>
+{itemizedTotal>0&&<div style={{fontSize:12,color:T.info,marginBottom:8}}>Total cap: <strong>{fmt(itemizedTotal)}</strong>/mo</div>}
+</div>)}
+{+inc>0&&effectiveVarCap>0&&<div style={{padding:12,background:T.infoBg,borderRadius:10}}>
+<div style={{fontSize:12,color:T.info}}>After fixed bills ({fmt(bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0))}) + variable ({fmt(effectiveVarCap)}): <strong style={{color:T.success}}>{fmt(+inc-bills.filter(b=>b.amt).reduce((s,b)=>s+(+b.amt||0),0)-effectiveVarCap)}</strong> left for spending</div></div>}
 </div>}
 
 {step===4&&<div>
@@ -1824,15 +1859,34 @@ Total budgeted: <strong>{fmt(cats.reduce((s,c)=>s+(+c.budget||0),0))}</strong>
 <div style={{fontSize:11,color:T.textDim,marginBottom:6}}>Splitting bills or expenses with someone?</div>
 <input value={partner} onChange={e=>setPartner(e.target.value)} placeholder="Partner's name" style={{...inpS(T),fontSize:14,maxWidth:240}}/></div></div>}
 
-{step===7&&<div style={{textAlign:"center",padding:20}}>
+{step===7&&<div>
+<div style={{padding:14,background:T.purpleBg,borderRadius:10,marginBottom:14}}>
+<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><Camera size={14} color={T.purple}/><span style={{fontSize:13,fontWeight:700,color:T.purple}}>What an API key unlocks</span></div>
+<div style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>📸 Snap a photo of any receipt → AI extracts every item, amount, and category. No manual entry.<br/>💬 Chat with an AI advisor that knows your spending, debts, and goals — get roasted, hyped, or therapized.</div>
+</div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:6}}>Choose your AI provider</div>
+<div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+{[{id:"anthropic",name:"Claude",link:"https://console.anthropic.com/settings/keys"},{id:"openai",name:"OpenAI",link:"https://platform.openai.com/api-keys"},{id:"gemini",name:"Gemini",link:"https://aistudio.google.com/apikey"}].map(p=>(
+<button key={p.id} onClick={()=>setAiProv(p.id)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${aiProv===p.id?T.success:T.border}`,background:aiProv===p.id?T.successBg:"transparent",color:aiProv===p.id?T.success:T.text,fontSize:11,fontWeight:600,cursor:"pointer"}}>{p.name}</button>))}
+</div>
+<div style={{fontSize:11,color:T.textDim,marginBottom:4}}>Paste your API key (sk-ant-... / sk-... / AIza...)</div>
+<input type="password" value={aiKey} onChange={e=>setAiKey(e.target.value)} placeholder="Optional — paste here or skip" style={{...inpS(T),fontSize:12,fontFamily:"monospace"}}/>
+<div style={{fontSize:10,color:T.textDim,marginTop:8,lineHeight:1.5}}>
+🔒 Stored only in your browser/Supabase row — never sent anywhere except directly to the AI provider you chose. <a href={aiProv==="anthropic"?"https://console.anthropic.com/settings/keys":aiProv==="openai"?"https://platform.openai.com/api-keys":"https://aistudio.google.com/apikey"} target="_blank" rel="noopener noreferrer" style={{color:T.info}}>Get a key →</a>
+</div>
+<div style={{fontSize:10,color:T.textDim,marginTop:6,fontStyle:"italic"}}>You can also add or change this anytime in Settings.</div>
+</div>}
+
+{step===8&&<div style={{textAlign:"center",padding:20}}>
 <div style={{fontSize:64,marginBottom:16}}>🚀</div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,textAlign:"left",marginBottom:16}}>
 {+inc>0&&<div style={{padding:10,background:T.successBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>INCOME</div><div style={{fontSize:16,fontWeight:700,color:T.success}}>{fmt(+inc)}</div></div>}
 {bills.filter(b=>b.amt).length>0&&<div style={{padding:10,background:T.infoBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>BILLS</div><div style={{fontSize:16,fontWeight:700,color:T.info}}>{bills.filter(b=>b.amt).length} bills</div></div>}
-{+varCap>0&&<div style={{padding:10,background:T.warnBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>VAR CAP</div><div style={{fontSize:16,fontWeight:700,color:T.warn}}>{fmt(+varCap)}</div></div>}
+{effectiveVarCap>0&&<div style={{padding:10,background:T.warnBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>VAR {varMode==="itemize"?"ITEMS":"CAP"}</div><div style={{fontSize:16,fontWeight:700,color:T.warn}}>{fmt(effectiveVarCap)}</div></div>}
 {goals.filter(g=>g.name).length>0&&<div style={{padding:10,background:T.purpleBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>GOALS</div><div style={{fontSize:16,fontWeight:700,color:T.purple}}>{goals.filter(g=>g.name).length} goals</div></div>}
 {cards.filter(c=>c.name).length>0&&<div style={{padding:10,background:T.bg,borderRadius:8,border:`1px solid ${T.border}`}}><div style={{fontSize:9,color:T.textDim}}>CARDS</div><div style={{fontSize:14,fontWeight:700,color:T.text}}>{cards.filter(c=>c.name).map(c=>c.name).join(", ")}</div></div>}
 {partner&&<div style={{padding:10,background:T.bg,borderRadius:8,border:`1px solid ${T.border}`}}><div style={{fontSize:9,color:T.textDim}}>PARTNER</div><div style={{fontSize:14,fontWeight:700,color:T.text}}>{partner}</div></div>}
+{aiKey&&<div style={{padding:10,background:T.purpleBg,borderRadius:8}}><div style={{fontSize:9,color:T.textDim}}>AI</div><div style={{fontSize:14,fontWeight:700,color:T.purple}}>{aiProv==="anthropic"?"Claude":aiProv==="openai"?"OpenAI":"Gemini"} ✓</div></div>}
 </div></div>}
 
 {navBtns}
@@ -1893,16 +1947,19 @@ const[tab,setTab]=useState("dash");const[mo,setMo]=useState(curMK);
 const[sideOpen,setSideOpen]=useState(true);const[persona,setPersona]=useState("unhinged");
 const[authed,setAuthed]=useState(false);const[activeUser,setActiveUser]=useState("greg");
 
-const[months,setMonths]=useState({[curMK]:{txns:SAMPLE_TXNS,budgets:DEFAULT_CATS.map(c=>({...c}))}});
-const[bal,setBal]=useState({sav:313,ira:3194,stk:1376,jnt:49966,inc:5656,fix:1780});
-const[debts,setDebts]=useState(DEBTS_DEFAULT);const[subs,setSubs]=useState(SUBS_DEFAULT);
+// Initial state is intentionally EMPTY — the load effect (keyed on activeUser)
+// hydrates from storage and applies isGreg-aware defaults. Seeding with real
+// numbers here would flash Greg's balance to other users for a frame.
+const[months,setMonths]=useState({[curMK]:{txns:[],budgets:BLANK_CATS.map(c=>({...c}))}});
+const[bal,setBal]=useState({sav:0,ira:0,stk:0,jnt:0,inc:0,fix:0});
+const[debts,setDebts]=useState([]);const[subs,setSubs]=useState([]);
 const[sideIncome,setSideIncome]=useState(0);const[apiKey,setApiKey]=useState("");
 const[cScores,setCScores]=useState([]);const[csForm,setCsForm]=useState({score:"",date:new Date().toISOString().slice(0,7)});
 const[userGoals,setUserGoals]=useState(null);const[goalContribs,setGoalContribs]=useState({});
 const[aiOpen,setAiOpen]=useState(false);const[aiMsg,setAiMsg]=useState("");const[aiChat,setAiChat]=useState([]);const[aiLoading,setAiLoading]=useState(false);
 const[aiModel,setAiModel]=useState("claude-sonnet-4-20250514");
 const[aiProvider,setAiProvider]=useState("anthropic");
-const[userEmojis,setUserEmojis]=useState({greg:"🎸"});
+const[userEmojis,setUserEmojis]=useState({});
 
 const callAI=async({system,messages,image,maxTokens=1000})=>{
 const p=aiProvider;const m=aiModel;const k=apiKey;
@@ -1950,14 +2007,15 @@ const[customSplits,setCustomSplits]=useState({});
 const[recurringSplits,setRecurringSplits]=useState([]);
 const[varCap,setVarCap]=useState(0);
 const[onboarded,setOnboarded]=useState(true);
+const[tourSeen,setTourSeen]=useState(true);
 const[userCards,setUserCards]=useState(CARD_MAP_DEFAULT);
-const[splitPartner,setSplitPartner]=useState("Sarah");
+const[splitPartner,setSplitPartner]=useState("Partner");
 const DEFAULT_DASH={order:["stats","whatsLeft","featuredGoal","velocity","runway","freedom","streaks","nwTrend","heatmap"],hidden:[]};
 const[dashWidgets,setDashWidgets]=useState(DEFAULT_DASH);
 const[undoStack,setUndoStack]=useState([]);
 const[savAccounts,setSavAccounts]=useState(null);
-const[exitDate,setExitDate]=useState("2026-08-01");
-const[exitLabel,setExitLabel]=useState("Europe");
+const[exitDate,setExitDate]=useState("");
+const[exitLabel,setExitLabel]=useState("");
 const[qa,setQa]=useState("");
 const[insI,setInsI]=useState(0);const[loaded,setLoaded]=useState(false);
 const savingGate=useRef(false);
@@ -2018,6 +2076,7 @@ d.customSplits?setCustomSplits(d.customSplits):setCustomSplits({});
 d.recurringSplits?setRecurringSplits(d.recurringSplits):setRecurringSplits([]);
 d.varCap!=null?setVarCap(d.varCap):setVarCap(isGreg?690:0);
 d.onboarded!=null?setOnboarded(d.onboarded):setOnboarded(isGreg);
+d.tourSeen!=null?setTourSeen(d.tourSeen):setTourSeen(isGreg);
 d.userCards?setUserCards(d.userCards):setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});
 d.splitPartner?setSplitPartner(d.splitPartner):setSplitPartner(isGreg?"Sarah":"Partner");
 if(d.dashWidgets){
@@ -2038,14 +2097,14 @@ setSideIncome(0);setApiKey("");setCScores([]);
 setUserGoals(isGreg?GREG_GOALS:null);
 setGoalContribs(isGreg?GREG_GOAL_CONTRIBS:{});
 setBillsPaid({});setBillActuals({});setSplits({});setCustomSplits({});setRecurringSplits([]);setVarCap(isGreg?690:0);
-setOnboarded(isGreg);setPersona("pro");setTab("dash");
+setOnboarded(isGreg);setTourSeen(isGreg);setPersona("pro");setTab("dash");
 setUserCards(isGreg?CARD_MAP_DEFAULT:{debit:"Debit"});setSplitPartner(isGreg?"Sarah":"Partner");
 setDashWidgets(isGreg?DEFAULT_DASH:{...DEFAULT_DASH,hidden:["freedom","nwTrend"]});
 setSavAccounts(null);setExitDate(isGreg?"2026-08-01":"");setExitLabel(isGreg?"Europe":"");
 }
 setUndoStack([]);setAiChat([]);
 setLoaded(true);setTimeout(()=>{savingGate.current=false},300)})()},[activeUser]);
-useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts,exitDate,exitLabel},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,userCards,splitPartner,dashWidgets,savAccounts,exitDate,exitLabel]);
+useEffect(()=>{if(loaded&&!savingGate.current)svData({months,mo,theme,acI,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,tourSeen,userCards,splitPartner,dashWidgets,savAccounts,exitDate,exitLabel},activeUser)},[months,mo,theme,acI,loaded,bal,debts,subs,persona,sideIncome,apiKey,cScores,userGoals,goalContribs,aiModel,userEmojis,aiProvider,recurring,billsPaid,billActuals,splits,customSplits,recurringSplits,varCap,onboarded,tourSeen,userCards,splitPartner,dashWidgets,savAccounts,exitDate,exitLabel]);
 
 const history=activeUser==="greg"?GREG_HISTORY:[];
 const txnsRaw=months[mo]?.txns||[];const cats=months[mo]?.budgets||DEFAULT_CATS;
@@ -2116,7 +2175,10 @@ if(!authed)return(<><style>{`@import url('https://fonts.googleapis.com/css2?fami
 <LoginScreen onLogin={u=>{setActiveUser(u);setAuthed(true)}} T={T} userEmojis={userEmojis}/></>);
 
 const handleOnboardComplete=(data)=>{
-setBal(p=>({...p,inc:data.income,fix:data.bills.reduce((s,b)=>s+b.amt,0)}));
+// Fixed total uses only kind="fixed" — itemized variable items are recurring
+// but they should NOT count toward the fixed bills budget line.
+const fixedTotal=data.bills.filter(b=>b.kind!=="variable").reduce((s,b)=>s+b.amt,0);
+setBal(p=>({...p,inc:data.income,fix:fixedTotal}));
 if(data.bills.length>0)setRecurring(data.bills);
 setVarCap(data.varCap);
 if(data.cats.length>0){const fullCats=[...data.cats,...DEFAULT_CATS.filter(dc=>!data.cats.find(c=>c.id===dc.id)).map(c=>({...c,budget:0}))];
@@ -2124,7 +2186,20 @@ setMonths(p=>{const mk=Object.keys(p)[0]||curMK;return{...p,[mk]:{...p[mk],budge
 if(data.goals.length>0)setUserGoals(data.goals);
 if(data.cards&&Object.keys(data.cards).length>0)setUserCards(data.cards);
 if(data.partner)setSplitPartner(data.partner);
-setOnboarded(true)};
+if(data.aiKey)setApiKey(data.aiKey);
+if(data.aiProv)setAiProvider(data.aiProv);
+setOnboarded(true);
+setTourSeen(false);};
+
+// Hard gate: while data is hydrating, show a splash. Without this, an
+// instant after Dylan logs in we would render the dashboard with whatever
+// state remained in memory from the previous user — Greg's balances would
+// flash for a frame even though the load effect overwrites them.
+if(authed&&!loaded)return(<div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Outfit','DM Sans',sans-serif"}}>
+<div style={{textAlign:"center"}}>
+<div style={{fontSize:48,marginBottom:12,animation:"fadeUp .3s ease"}}>💰</div>
+<div style={{fontSize:13,color:T.textDim}}>Loading your finances…</div>
+</div></div>);
 
 if(authed&&!onboarded&&loaded)return(<><style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
 <OnboardingWizard T={T} onComplete={handleOnboardComplete} userName={getUsers().find(u=>u.id===activeUser)?.name||activeUser}/></>);
@@ -2265,6 +2340,30 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 <span style={{fontSize:11,color:T.textMuted}}>— not current month</span></div>
 <button onClick={()=>setMo(curMK)} style={{...btnS(T,false),fontSize:10,padding:"4px 10px",borderColor:T.warn+"50",color:T.warn}}>Go to {curMK}</button></div>}
 <TabErrorBoundary T={T} tabKey={tab} onReset={()=>setTab("dash")}>{renderPage()}</TabErrorBoundary></div></main>
+
+{!tourSeen&&authed&&onboarded&&<div onClick={()=>setTourSeen(true)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,animation:"fadeUp .3s ease"}}>
+<div onClick={e=>e.stopPropagation()} style={{...glass(T),maxWidth:560,width:"100%",animation:"fadeUp .3s ease"}}>
+<div style={{textAlign:"center",marginBottom:20}}>
+<div style={{fontSize:44,marginBottom:8}}>👋</div>
+<div style={{fontSize:22,fontWeight:800,color:T.text,marginBottom:6}}>Welcome to Coinspire, {getUsers().find(u=>u.id===activeUser)?.name||activeUser}!</div>
+<div style={{fontSize:13,color:T.textMuted}}>4 things to try first — then explore on your own.</div>
+</div>
+<div style={{display:"grid",gap:10,marginBottom:20}}>
+{[{icon:"➕",title:"Add a transaction",sub:"Quick-type \"$45 coffee\" on the dashboard, or use Transactions → Add."},
+{icon:"📸",title:"Scan a receipt",sub:"Transactions → Scan. Snap a photo and AI extracts every line item. (Requires API key.)"},
+{icon:"👥",title:"Split with your partner",sub:"Click the 👥 icon on any transaction or bill to split — your share counts against your budget."},
+{icon:"🎯",title:"Set a savings goal",sub:"Goals → New Goal. Track progress, log contributions, see weekly pace."}].map((t,i)=>(
+<div key={i} style={{display:"flex",gap:12,padding:12,background:T.bg,borderRadius:10,border:`1px solid ${T.border}`}}>
+<div style={{fontSize:24,flexShrink:0}}>{t.icon}</div>
+<div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:2}}>{t.title}</div>
+<div style={{fontSize:11,color:T.textDim,lineHeight:1.4}}>{t.sub}</div></div>
+</div>))}
+</div>
+{!apiKey&&<div style={{padding:10,background:T.warnBg,borderRadius:8,marginBottom:16,fontSize:11,color:T.warn,lineHeight:1.4}}>
+💡 No AI key set. Receipt scanning + AI advisor are disabled. Add a key anytime in <strong>Settings</strong>.
+</div>}
+<button onClick={()=>setTourSeen(true)} style={{...btnS(T,true),width:"100%",justifyContent:"center"}}>Got it — let's go 🚀</button>
+</div></div>}
 
 {mob&&<nav style={{position:"fixed",bottom:0,left:0,right:0,height:60,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-around",alignItems:"center",zIndex:50,paddingBottom:"env(safe-area-inset-bottom,0)"}}>
 {[NAV[0],NAV[1],NAV[2],NAV[3],NAV[NAV.length-1]].map(item=>{const act=tab===item.id;return(
