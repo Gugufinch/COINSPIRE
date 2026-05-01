@@ -16,15 +16,39 @@ import {
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
-// Supabase
+// ── Supabase + RLS-aware token transport ──
+// Server-side RLS gates every read/write of user_data and user_pins on a
+// per-user access_token sent in the x-coinspire-token header. Without the
+// token, RLS returns zero rows even with the public anon key. We ship the
+// token by overriding the supabase client's `fetch` so every PostgREST call
+// gets the header automatically.
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+let SESSION_TOKEN = null;
+const setSessionToken = (t) => { SESSION_TOKEN = t || null; };
+const tokenFetch = (input, init = {}) => {
+  const headers = new Headers(init.headers || {});
+  if (SESSION_TOKEN) headers.set("x-coinspire-token", SESSION_TOKEN);
+  return fetch(input, { ...init, headers });
+};
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey, { global: { fetch: tokenFetch } })
+  : null;
+
+// Hydrate the token cached by a previous session so a page reload doesn't
+// log the user out on the wrong side of RLS.
+try {
+  const lastUser = localStorage.getItem("coinspire_last_user");
+  if (lastUser) {
+    const t = localStorage.getItem("coinspire_token_" + lastUser);
+    if (t) SESSION_TOKEN = t;
+  }
+} catch {}
 
 const svData = async (data, u = "greg") => {
   if(!data){if(!supabase){try{localStorage.removeItem("coinspire_"+u)}catch{}}else{try{await supabase.from("user_data").delete().eq("user_id",u)}catch{}}return}
   if (!supabase) { try { localStorage.setItem("coinspire_" + u, JSON.stringify(data)); } catch(e) { console.error(e); } return; }
-  try { await supabase.from("user_data").upsert({ user_id: u, data, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); } catch(e) { console.error(e); }
+  try { await supabase.from("user_data").upsert({ user_id: u, data, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); } catch(e) { console.error("[svData]",e); }
 };
 const ldData = async (u = "greg") => {
   if (!supabase) { try { const d = localStorage.getItem("coinspire_" + u); return d ? JSON.parse(d) : null; } catch { return null; } }
@@ -223,13 +247,50 @@ const updated=users.filter(u=>u.id!==uid);setUsersLocal(updated);saveUsers(updat
 try{localStorage.removeItem("coinspire_"+uid);localStorage.removeItem("coinspire_pin_"+uid)}catch{}};
 
 const handleSubmit=async()=>{
-  if(setupMode){if(pin.length>=4){
-    if(supabase){try{await supabase.from("user_pins").upsert({user_id:user,pin},{onConflict:"user_id"})}catch{}}
-    else{try{localStorage.setItem("coinspire_pin_"+user,pin)}catch{}}
-    onLogin(user)}return}
+  // SETUP MODE = creating a brand-new account (first PIN).
+  if(setupMode){
+    if(pin.length<4)return;
+    if(supabase){
+      // Server mints the access_token. Persist it locally so this device
+      // can decrypt RLS-protected reads on reload.
+      try{
+        const{data,error}=await supabase.rpc("coinspire_signup",{p_user_id:user,p_pin:pin});
+        if(error||!data){setError(true);setPin("");setTimeout(()=>setError(false),1500);return}
+        setSessionToken(data);
+        try{localStorage.setItem("coinspire_token_"+user,data);localStorage.setItem("coinspire_last_user",user)}catch{}
+      }catch(e){console.error("[signup]",e);setError(true);setPin("");return}
+    } else {
+      try{localStorage.setItem("coinspire_pin_"+user,pin)}catch{}
+    }
+    onLogin(user);return;
+  }
+  // LOGIN MODE = existing account.
+  if(supabase){
+    try{
+      const{data:token,error}=await supabase.rpc("coinspire_login",{p_user_id:user,p_pin:pin});
+      if(error){console.error("[login]",error);setError(true);setPin("");setTimeout(()=>setError(false),1500);return}
+      if(!token){
+        // Distinguish "no such user yet" from "wrong PIN". RPC returns null
+        // for both, so probe with a second RPC call: if user_id is unknown
+        // we want to drop into setup mode, otherwise it's a bad PIN.
+        // Cheap heuristic: try signing up — if "user_id_taken" we know they
+        // exist (so the null was wrong PIN); otherwise treat as new.
+        try{
+          const{error:probeErr}=await supabase.rpc("coinspire_signup",{p_user_id:user,p_pin:"___probe___"});
+          if(probeErr&&/user_id_taken/.test(probeErr.message||"")){
+            setError(true);setPin("");setTimeout(()=>setError(false),1500);return;
+          }
+        }catch{}
+        setSetupMode(true);setPin("");return;
+      }
+      setSessionToken(token);
+      try{localStorage.setItem("coinspire_token_"+user,token);localStorage.setItem("coinspire_last_user",user)}catch{}
+      onLogin(user);return;
+    }catch(e){console.error("[login]",e);setError(true);setPin("");return}
+  }
+  // localStorage-only fallback (no supabase configured)
   let stored=null;
-  if(supabase){try{const{data}=await supabase.from("user_pins").select("pin").eq("user_id",user).single();stored=data?.pin}catch{}}
-  else{try{stored=localStorage.getItem("coinspire_pin_"+user)}catch{}}
+  try{stored=localStorage.getItem("coinspire_pin_"+user)}catch{}
   if(!stored){setSetupMode(true);setPin("");return}
   if(pin===stored){onLogin(user)}else{setError(true);setPin("");setTimeout(()=>setError(false),1500)}
 };
@@ -2291,8 +2352,8 @@ case"settings":return(
 <div style={{fontSize:11,color:T.textMuted}}>Use the <strong>Customize</strong> button on the Dashboard to show/hide and reorder widgets.</div>
 </div>
 
-<button onClick={()=>{if(confirm("Reset ALL data for "+activeUser+"? This cannot be undone.")){savingGate.current=false;svData(null,activeUser);setLoaded(false);savingGate.current=true;setAuthed(false)}}} style={{...btnS(T,false),color:T.danger}}><Trash2 size={12}/>Reset Account</button>
-<button onClick={()=>{savingGate.current=true;setAuthed(false);setLoaded(false)}} style={{...btnS(T,false),marginLeft:"auto"}}><Lock size={12}/>Lock</button></div></div></div>);
+<button onClick={()=>{if(confirm("Reset ALL data for "+activeUser+"? This cannot be undone.")){savingGate.current=false;svData(null,activeUser);try{localStorage.removeItem("coinspire_token_"+activeUser);localStorage.removeItem("coinspire_last_user")}catch{};setSessionToken(null);setLoaded(false);savingGate.current=true;setAuthed(false)}}} style={{...btnS(T,false),color:T.danger}}><Trash2 size={12}/>Reset Account</button>
+<button onClick={()=>{savingGate.current=true;try{localStorage.removeItem("coinspire_last_user")}catch{};setSessionToken(null);setAuthed(false);setLoaded(false)}} style={{...btnS(T,false),marginLeft:"auto"}}><Lock size={12}/>Lock</button></div></div></div>);
 default:return<PlaceholderPage title="Page" icon={Home} T={T}/>}};
 
 const sW=mob?0:(sideOpen?230:64);
