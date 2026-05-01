@@ -379,7 +379,7 @@ return(<div style={glass(T)}>
 
 function StreaksW({txns,budget,day,T,debts}){
 const dailyB=budget/30;let streak=0;
-for(let d=day;d>=1;d--){const ds=txns.filter(t=>parseInt(t.d.split("-")[2])===d).reduce((s,t)=>s+t.amt,0);if(ds<=dailyB*1.5)streak++;else break}
+for(let d=day;d>=1;d--){const ds=txns.filter(t=>parseInt(t.d.split("-")[2])===d).reduce((s,t)=>s+(t.splitAmt??t.amt),0);if(ds<=dailyB*1.5)streak++;else break}
 const debtsPaid=debts?debts.filter(d=>d.status==="paid").length:7;const debtsTotal=debts?debts.length:10;
 const trackMo=history.length||1;
 const st=[{icon:"🔥",l:"Budget Streak",v:`${streak}d`,s:`${streak} days in target`,c:T.success},
@@ -545,7 +545,7 @@ setTxns(p=>p.map(x=>x.id===t.id?{...x,splitPct:pct,splitAmt:Math.round(t.amt*(1-
 setSplitTxnId(null)};
 const fileRef=useCallback(node=>{if(node)node.value=""},[scanMode]);
 const isBillTxn=useCallback(t=>{if(t.isBill)return true;const dl=t.desc.toLowerCase();const clean=dl.replace(/ \((?:you|greg|sarah|partner) \d+%\)/i,"");if(billNames&&(billNames.has(dl)||billNames.has(clean)))return true;return false},[billNames]);
-const byCard=useMemo(()=>{const m={};txns.filter(t=>!isBillTxn(t)).forEach(t=>{m[t.card]=(m[t.card]||0)+t.amt});return m},[txns,billNames,isBillTxn]);
+const byCard=useMemo(()=>{const m={};txns.filter(t=>!isBillTxn(t)).forEach(t=>{m[t.card]=(m[t.card]||0)+(t.splitAmt??t.amt)});return m},[txns,billNames,isBillTxn]);
 const filtered=useMemo(()=>{let f=txns.filter(t=>!isBillTxn(t));if(filt)f=f.filter(t=>t.desc.toLowerCase().includes(filt.toLowerCase()));if(catF)f=f.filter(t=>t.cat===catF);if(cardF)f=f.filter(t=>t.card===cardF);return f.sort((a,b)=>b.d.localeCompare(a.d))},[txns,filt,catF,cardF,billNames,isBillTxn]);
 const addTxn=()=>{if(!af.desc||!af.amt)return;addTxnsSmart([{id:Date.now(),d:af.d,desc:af.desc,amt:parseFloat(af.amt),cat:autoCat(af.desc)||af.cat,card:af.card}]);setAf({d:new Date().toISOString().split("T")[0],desc:"",amt:"",cat:"misc",card:"debit"});setShowAdd(false)};
 const delTxn=(id)=>{const t=txns.find(x=>x.id===id);if(t&&setUndoStack)setUndoStack(p=>[{type:"txn",data:t,mo},...p.slice(0,20)]);setTxns(p=>p.filter(x=>x.id!==id))};
@@ -811,7 +811,7 @@ return<tr key={c.id} style={{borderBottom:`1px solid ${T.border}`,cursor:"pointe
 </tr>})}</tbody></>}
 {txnView==="card"&&<><thead><tr style={{borderBottom:`2px solid ${T.border}`}}>
 {["Card","Count","Total","Avg","% of Spending"].map((h,i)=><th key={i} style={{textAlign:i>=2?"right":"left",padding:"12px 14px",fontSize:10,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
-<tbody>{Object.entries(userCards).filter(([k])=>(byCard[k]||0)>0).sort((a,b)=>(byCard[b[0]]||0)-(byCard[a[0]]||0)).map(([k,v])=>{const total=byCard[k]||0;const cnt=filtered.filter(t=>t.card===k).length;const allSpend=filtered.reduce((s,t)=>s+t.amt,0);const pct=allSpend>0?(total/allSpend*100):0;
+<tbody>{Object.entries(userCards).filter(([k])=>(byCard[k]||0)>0).sort((a,b)=>(byCard[b[0]]||0)-(byCard[a[0]]||0)).map(([k,v])=>{const total=byCard[k]||0;const cnt=filtered.filter(t=>t.card===k).length;const allSpend=filtered.reduce((s,t)=>s+(t.splitAmt??t.amt),0);const pct=allSpend>0?(total/allSpend*100):0;
 return<tr key={k} style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onClick={()=>{setCardF(cardF===k?"":k);setTxnView("date")}} onMouseEnter={e=>e.currentTarget.style.background=T.bgAlt} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
 <td style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}><CreditCard size={14} color={T.info}/><span style={{fontSize:12,fontWeight:600}}>{v}</span></td>
 <td style={{padding:"10px 14px",fontSize:12,color:T.textDim}}>{cnt}</td>
@@ -821,7 +821,7 @@ return<tr key={k} style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer"}
 </tr>})}</tbody></>}
 </table></div>
 <div style={{marginTop:10,fontSize:11,color:T.textDim,display:"flex",justifyContent:"space-between"}}>
-<span>{filtered.length} transactions</span><span>Spending: <strong style={{color:T.danger}}>{fmt(filtered.filter(t=>!t.isBill).reduce((s,t)=>s+t.amt,0))}</strong>{filtered.some(t=>t.isBill)&&<span style={{color:T.textDim}}> + Bills: <strong style={{color:T.purple}}>{fmt(filtered.filter(t=>t.isBill).reduce((s,t)=>s+t.amt,0))}</strong></span>}</span></div></div>)}
+<span>{filtered.length} transactions</span><span>Spending: <strong style={{color:T.danger}}>{fmt(filtered.filter(t=>!t.isBill).reduce((s,t)=>s+(t.splitAmt??t.amt),0))}</strong>{filtered.some(t=>t.isBill)&&<span style={{color:T.textDim}}> + Bills: <strong style={{color:T.purple}}>{fmt(filtered.filter(t=>t.isBill).reduce((s,t)=>s+(t.splitAmt??t.amt),0))}</strong></span>}</span></div></div>)}
 
 function BudgetPage({T,cats,setCats,byCat,totS,totB,bal,varCap,fixedBillTotal}){
 const[editId,setEditId]=useState(null);const[editVal,setEditVal]=useState("");
@@ -1619,10 +1619,10 @@ const lastSun=sundays.filter(d=>d<=curDay).pop();
 const nextSun=sundays.find(d=>d>curDay);
 
 // Week spending (Mon-Sun)
-const weekSpend=(sunDay)=>{const monDay=sunDay-6;return txns.filter(t=>!t.isBill).filter(t=>{const d=parseInt(t.d.split("-")[2]);return d>=monDay&&d<=sunDay}).reduce((s,t)=>s+t.amt,0)};
+const weekSpend=(sunDay)=>{const monDay=sunDay-6;return txns.filter(t=>!t.isBill).filter(t=>{const d=parseInt(t.d.split("-")[2]);return d>=monDay&&d<=sunDay}).reduce((s,t)=>s+(t.splitAmt??t.amt),0)};
 
-const totalSpend=txns.filter(t=>!t.isBill).reduce((s,t)=>s+t.amt,0);
-const totalBills=txns.filter(t=>t.isBill).reduce((s,t)=>s+t.amt,0);
+const totalSpend=txns.filter(t=>!t.isBill).reduce((s,t)=>s+(t.splitAmt??t.amt),0);
+const totalBills=txns.filter(t=>t.isBill).reduce((s,t)=>s+(t.splitAmt??t.amt),0);
 
 return(<div>
 <div style={{...glass(T),marginBottom:14}}>
@@ -1865,6 +1865,24 @@ const NAV=[
 const SECS={main:"Core",money:"Money",track:"Tracking",sys:""};
 
 // ═══════════════════════════════════════════════════
+// ERROR BOUNDARY (per-tab)
+// ═══════════════════════════════════════════════════
+class TabErrorBoundary extends React.Component{
+constructor(p){super(p);this.state={err:null}}
+static getDerivedStateFromError(err){return{err}}
+componentDidCatch(err,info){console.error("[TabError]",err,info)}
+componentDidUpdate(prev){if(prev.tabKey!==this.props.tabKey&&this.state.err)this.setState({err:null})}
+render(){
+if(!this.state.err)return this.props.children;
+const T=this.props.T||{danger:"#f44",textMuted:"#888",textDim:"#555",text:"#fff",card:"#222",border:"#333"};
+return(<div style={{padding:20,background:T.card,borderRadius:12,border:`1px solid ${T.danger}40`}}>
+<div style={{fontSize:16,fontWeight:700,color:T.danger,marginBottom:8}}>⚠ Page Error</div>
+<div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>{this.state.err?.message||"Something went wrong rendering this tab."}</div>
+<button onClick={()=>{this.setState({err:null});this.props.onReset&&this.props.onReset()}} style={{padding:"6px 14px",borderRadius:6,border:`1px solid ${T.border}`,background:T.card,color:T.text,cursor:"pointer",fontSize:12}}>← Back to Dashboard</button>
+<pre style={{fontSize:9,color:T.textDim,marginTop:12,whiteSpace:"pre-wrap",wordBreak:"break-all",maxHeight:200,overflow:"auto"}}>{this.state.err?.stack}</pre>
+</div>)}}
+
+// ═══════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════
 export default function App(){
@@ -2060,7 +2078,7 @@ else if(addedCount>=5)showToast("⚡","Bulk Import!",`${addedCount} transactions
 else if(Math.random()<0.08)showToast(["💰","🪙","📊","✨","🎯"][Math.floor(Math.random()*5)],"Logged!",
 ["Money tracked is money managed","Every dollar accounted for","Building that financial awareness","Data is power","One step closer to freedom"][Math.floor(Math.random()*5)],T.success)};
 
-const totD=debts.reduce((s,d)=>s+(d.bal||0),0);const spendTxns=txns.filter(t=>!t.isBill);const totS=spendTxns.reduce((s,t)=>s+t.amt,0);const totB=cats.reduce((s,c)=>s+c.budget,0);const billTxns=txns.filter(t=>t.isBill);const totBills=billTxns.reduce((s,t)=>s+t.amt,0);
+const totD=debts.reduce((s,d)=>s+(d.bal||0),0);const spendTxns=txns.filter(t=>!t.isBill);const totS=spendTxns.reduce((s,t)=>s+(t.splitAmt??t.amt),0);const totB=cats.reduce((s,c)=>s+c.budget,0);const billTxns=txns.filter(t=>t.isBill);const totBills=billTxns.reduce((s,t)=>s+(t.splitAmt??t.amt),0);
 const cur={...(history.length?history[history.length-1]:{m:"",inc:0,fix:0,spend:0,loans:0,sav:0,ira:0,stk:0,jnt:0}),sav:bal.sav,ira:bal.ira,stk:bal.stk,jnt:bal.jnt,inc:bal.inc,fix:bal.fix,loans:totD};
 const prev=history.length>1?history[history.length-2]:cur;
 const nw=(cur.sav+cur.ira+cur.stk+cur.jnt)-cur.loans;
@@ -2074,7 +2092,7 @@ if(!months[nk]){const prevBudgets=months[mo]?.budgets||DEFAULT_CATS;setMonths(pr
 // Auto-seed recurring splits for new month
 if(recurringSplits.length>0){const rc=recurringSplits.map(r=>({id:`rec_${r.id}_${nk}`,recurId:r.id,desc:r.desc,amt:r.amt,partnerAmt:r.amt*((r.pct||50)/100),myAmt:r.amt*(1-(r.pct||50)/100),pct:r.pct,date:null,settled:false,type:"recurring"}));
 setCustomSplits(p=>({...p,[nk]:[...(p[nk]||[]),...rc.filter(r=>!(p[nk]||[]).find(c=>c.recurId===r.recurId))]}))}}setMo(nk)};
-const byCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);txns.filter(t=>!t.isBill).forEach(t=>{if(m[t.cat]!==undefined)m[t.cat]+=t.amt});return m},[txns,cats]);
+const byCat=useMemo(()=>{const m={};cats.forEach(c=>m[c.id]=0);txns.filter(t=>!t.isBill).forEach(t=>{if(m[t.cat]!==undefined)m[t.cat]+=(t.splitAmt??t.amt)});return m},[txns,cats]);
 const mOff=useMemo(()=>{const p=mo.split("'");return(new Date(2000+parseInt(p[1]),MO.indexOf(p[0]),1).getDay()+6)%7},[mo]);
 
 const insights=useMemo(()=>{
@@ -2246,7 +2264,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0}`}</style>
 <span style={{fontSize:12,color:T.warn,fontWeight:600}}>Viewing {mo}</span>
 <span style={{fontSize:11,color:T.textMuted}}>— not current month</span></div>
 <button onClick={()=>setMo(curMK)} style={{...btnS(T,false),fontSize:10,padding:"4px 10px",borderColor:T.warn+"50",color:T.warn}}>Go to {curMK}</button></div>}
-{renderPage()}</div></main>
+<TabErrorBoundary T={T} tabKey={tab} onReset={()=>setTab("dash")}>{renderPage()}</TabErrorBoundary></div></main>
 
 {mob&&<nav style={{position:"fixed",bottom:0,left:0,right:0,height:60,background:T.card,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-around",alignItems:"center",zIndex:50,paddingBottom:"env(safe-area-inset-bottom,0)"}}>
 {[NAV[0],NAV[1],NAV[2],NAV[3],NAV[NAV.length-1]].map(item=>{const act=tab===item.id;return(
