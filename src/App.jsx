@@ -15,6 +15,7 @@ import {
   MessageCircle, Send, Hash
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import { planPayoff, compareStrategies, STRATEGIES } from "./debtPlan.js";
 
 // ── Supabase + RLS-aware token transport ──
 // Server-side RLS gates every read/write of user_data and user_pins on a
@@ -1168,7 +1169,123 @@ return(<div key={d} style={{marginBottom:10}}>
 <span>Annual: <strong style={{color:T.warn}}>{fmt((fixedTotal+varCap)*12)}</strong>/yr</span></div>
 </div>)}
 
-function DebtPage({T,debts,setDebts}){
+// ── Payoff plan: one pot (every payment plus the extra), a chosen order, rollover ──
+// Math lives in src/debtPlan.js (tested in tests/debtPlan.test.js).
+const PLAN_KEY="coinspire_debt_plan";
+const moAhead=(n)=>{const dt=new Date();dt.setDate(1);dt.setMonth(dt.getMonth()+n);return`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`};
+const moAheadLong=(n)=>{const dt=new Date();dt.setDate(1);dt.setMonth(dt.getMonth()+n);return`${MO[dt.getMonth()]} ${dt.getFullYear()}`};
+const usd0=(n)=>"$"+Math.round(Math.abs(n||0)).toLocaleString("en-US");
+const MONO="'Space Mono',monospace";
+
+function PayoffPlan({T,debts,plan,strategy,setStrategy,extra,setExtra,loanBudget}){
+const cmp=useMemo(()=>compareStrategies(debts,extra),[debts,extra]);
+const presets=useMemo(()=>{const lb=Math.round(+loanBudget||0);const base=[0,50,100,200,300].map(amt=>({amt,note:amt===0?"no extra":""}));
+if(lb>0){const hit=base.find(p=>p.amt===lb);if(hit)hit.note="Extra Loan budget";else base.push({amt:lb,note:"Extra Loan budget"})}
+return base.sort((a,b)=>a.amt-b.amt)},[loanBudget]);
+const rows=useMemo(()=>presets.map(p=>({...p,plan:planPayoff(debts,{strategy,extra:p.amt})})),[presets,debts,strategy]);
+const zero=rows.find(r=>r.amt===0)?.plan;
+const isPreset=presets.some(p=>p.amt===extra);
+const[custom,setCustom]=useState(isPreset?"":String(extra));
+const pickPreset=(amt)=>{setExtra(amt);setCustom("")};
+const typeCustom=(v)=>{setCustom(v);const n=parseFloat(v);if(Number.isFinite(n)&&n>=0)setExtra(Math.min(Math.round(n*100)/100,1000000));else if(v==="")setExtra(0)};
+
+// One plain sentence on what the other order would change.
+const other=()=>{const sel=cmp[strategy],av=cmp.avalanche,sn=cmp.snowball;
+const same=(a,b)=>a.order.map(s=>s.id).join()===b.order.map(s=>s.id).join();
+if(!sel?.done)return null;
+if(strategy==="avalanche"){if(same(av,sn))return"Snowball picks the same order on these debts.";
+const d=sn.totalInterest-av.totalInterest;
+return sn.firstWin&&av.firstWin&&sn.firstWin<av.firstWin?`Snowball would clear a debt by month ${sn.firstWin} (this plan: month ${av.firstWin}) for ${usd0(d)} more interest.`:`Snowball would cost ${usd0(d)} more interest.`}
+if(same(sel,av))return"Same order as Avalanche on these debts, so it costs nothing extra.";
+const d=sel.totalInterest-av.totalInterest;const mo=sel.months-av.months;
+return`${usd0(d)} more interest than Avalanche${mo>0?` and ${mo} month${mo>1?"s":""} longer`:""}${sel.firstWin&&av.firstWin&&sel.firstWin<av.firstWin?`, for a first payoff in month ${sel.firstWin} instead of ${av.firstWin}`:""}.`};
+
+const seg=(on)=>({minHeight:60,padding:"10px 6px",borderRadius:12,border:`1px solid ${on?T.success:T.border}`,background:on?T.successBg:"transparent",color:T.text,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,fontFamily:"inherit",transition:"all .15s"});
+const rowS=(on)=>({width:"100%",minHeight:52,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"8px 12px",borderRadius:12,border:`1px solid ${on?T.success:"transparent"}`,background:on?T.successBg:"transparent",color:T.text,cursor:"pointer",textAlign:"left",fontFamily:"inherit",transition:"all .15s"});
+const span=Math.max(1,plan.months);
+const waitBg=`repeating-linear-gradient(135deg,${T.textDim}66 0 3px,transparent 3px 6px)`;
+
+return(<div data-plan style={{...glass(T),marginBottom:14}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,flexWrap:"wrap",marginBottom:14}}>
+<div style={{...lbl(T),marginBottom:0}}>Payoff Plan</div>
+<div style={{fontSize:11,color:T.textMuted}}>{usd0(plan.budget)}/mo in one pot. A paid-off debt's payment rolls to the next.</div></div>
+
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,340px),1fr))",gap:24}}>
+<div>
+{/* hero */}
+<div style={{marginBottom:18}}>
+<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Debt-free</div>
+{plan.done?<div style={{fontSize:40,fontWeight:800,letterSpacing:-2,wordSpacing:"-.3em",fontFamily:MONO,color:T.success,lineHeight:1.1}}>{moAheadLong(plan.months)}</div>
+:<div><div style={{fontSize:22,fontWeight:800,fontFamily:MONO,color:T.danger,lineHeight:1.2}}>Not in 50 years</div>
+<div style={{fontSize:12,color:T.textMuted,marginTop:4}}>The payments don't cover the interest. Add extra below or raise a payment.</div></div>}
+{plan.done&&<div style={{display:"flex",gap:18,marginTop:10,flexWrap:"wrap"}}>
+{[["Months",plan.months,T.text],["Interest",usd0(plan.totalInterest),T.warn],["Each month",usd0(plan.budget),T.info]].map(([l,v,c])=><div key={l}>
+<div style={{fontSize:9,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{l}</div>
+<div style={{fontSize:16,fontWeight:700,fontFamily:MONO,color:c}}>{v}</div></div>)}</div>}
+</div>
+
+{/* order choice, each option shows what it costs */}
+<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:6}}>Order</div>
+<div role="radiogroup" aria-label="Payoff order" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+{Object.entries(STRATEGIES).map(([k,st])=>{const on=k===strategy;const c=cmp[k];return(
+<button key={k} role="radio" aria-checked={on} onClick={()=>setStrategy(k)} style={seg(on)}>
+<span style={{fontSize:12,fontWeight:700,color:on?T.success:T.text}}>{st.label}</span>
+<span style={{fontSize:12,fontWeight:700,fontFamily:MONO,color:on?T.text:T.textMuted}}>{c.done?usd0(c.totalInterest):"never"}</span>
+<span style={{fontSize:10,color:T.textDim}}>{c.done?`free ${moAhead(c.months)}`:""}</span></button>)})}</div>
+<div style={{fontSize:12,color:T.textMuted,marginTop:8,lineHeight:1.45}}><strong style={{color:T.text}}>{STRATEGIES[strategy].rule}.</strong> {STRATEGIES[strategy].why}{other()?<><br/><span style={{color:T.textDim}}>{other()}</span></>:null}</div>
+
+{/* extra each month: every row is a what-if, tap to use it */}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginTop:18,marginBottom:6}}>
+<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Extra each month</div>
+<div style={{fontSize:10,color:T.textDim}}>vs no extra</div></div>
+<div style={{display:"grid",gap:2}}>
+{rows.map(r=>{const on=r.amt===extra&&!custom;const p=r.plan;const dm=zero&&zero.done&&p.done?zero.months-p.months:null;const di=zero&&zero.done&&p.done?zero.totalInterest-p.totalInterest:null;return(
+<button key={r.amt} onClick={()=>pickPreset(r.amt)} aria-pressed={on} style={rowS(on)}>
+<span style={{display:"flex",flexDirection:"column"}}>
+<span style={{fontSize:14,fontWeight:800,fontFamily:MONO,color:on?T.success:T.text}}>+{usd0(r.amt)}</span>
+{r.note&&<span style={{fontSize:10,color:T.textDim}}>{r.note}</span>}</span>
+<span style={{display:"flex",flexDirection:"column",alignItems:"flex-end"}}>
+<span style={{fontSize:13,fontWeight:700}}>{p.done?<>{moAhead(p.months)} <span style={{color:T.textDim,fontWeight:500,fontSize:11}}>· {p.months} mo</span></>:<span style={{color:T.danger}}>never</span>}</span>
+{r.amt>0&&dm!=null&&<span style={{fontSize:11,color:on?T.text:T.textMuted}}>{dm} mo sooner · {usd0(di)} less interest</span>}
+{r.amt===0&&p.done&&<span style={{fontSize:11,color:T.textDim}}>rollover alone</span>}</span></button>)})}
+<label style={{...rowS(!!custom),cursor:"text"}}>
+<span style={{fontSize:12,fontWeight:600,color:custom?T.success:T.textMuted}}>Other amount</span>
+<span style={{display:"flex",alignItems:"center",gap:6}}>
+{custom&&plan.done&&<span style={{fontSize:11,color:T.textMuted}}>{moAhead(plan.months)}</span>}
+<span style={{position:"relative"}}><span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:T.textDim}}>$</span>
+<input type="number" inputMode="decimal" min="0" step="10" placeholder="0" value={custom} onChange={e=>typeCustom(e.target.value)} aria-label="Other extra amount per month" style={{...inpS(T),width:110,minHeight:44,paddingLeft:22,fontFamily:MONO,fontSize:16,textAlign:"right"}}/></span></span></label>
+</div>
+</div>
+
+{/* the order, as a staircase: own payment, then the extra and rollover arrive, then gone */}
+<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
+<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Who gets paid off when</div>
+{plan.done&&<div style={{display:"flex",gap:10,fontSize:10,color:T.textDim}}>
+<span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:T.warn,opacity:.5}}/>own payment</span>
+{plan.order.some(st=>st.hold)&&<span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:waitBg}}/>on hold</span>}
+<span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:T.success}}/>extra + rollover</span></div>}</div>
+{plan.order.map((st,i)=>{const pm=st.payoffMonth;const bf=st.boostFrom;const end=pm??span;const boostStart=bf!=null&&bf<=end?bf-1:end;return(
+<div key={st.id} style={{display:"flex",gap:12,padding:"12px 0",borderBottom:i<plan.order.length-1?`1px solid ${T.border}`:"none"}}>
+<div style={{width:26,height:26,flex:"0 0 26px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,color:T.textMuted,fontSize:12,fontWeight:800,fontFamily:MONO,display:"flex",alignItems:"center",justifyContent:"center"}}>{i+1}</div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+<span style={{fontSize:14,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</span>
+<span style={{fontSize:13,fontWeight:700,color:pm?T.text:T.danger,whiteSpace:"nowrap"}}>{pm?moAheadLong(pm):"not paid off"}</span></div>
+<div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11,color:T.textDim,marginTop:1}}>
+<span>{st.rate}% APR · {usd0(st.bal)}{st.hold?" · on hold, goes last":""}</span>{pm&&<span>month {pm}</span>}</div>
+{plan.done&&<div style={{position:"relative",height:8,borderRadius:4,background:T.bg,marginTop:8,overflow:"hidden"}}>
+<div style={{position:"absolute",left:0,top:0,bottom:0,width:`${boostStart/span*100}%`,transition:"width .35s ease",...(st.hold?{background:waitBg}:{background:T.warn,opacity:.5})}}/>
+<div style={{position:"absolute",left:`${boostStart/span*100}%`,top:0,bottom:0,width:`${Math.max(0,end-boostStart)/span*100}%`,background:T.success,borderRadius:4,transition:"left .35s ease, width .35s ease"}}/></div>}
+{st.rollsTo&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>then <strong style={{color:T.text,fontFamily:MONO}}>{usd0(st.rollsTo.gets)}</strong>/mo goes to {st.rollsTo.name}</div>}
+</div></div>)})}
+{plan.done&&plan.order.length>0&&<div style={{marginTop:14,padding:"12px 14px",borderRadius:12,background:T.bg,fontSize:12,color:T.textMuted,lineHeight:1.45}}>
+After {moAheadLong(plan.months)}, <strong style={{color:T.success,fontFamily:MONO}}>{usd0(plan.budget)}</strong> a month is yours again.</div>}
+</div>
+</div>
+</div>)}
+
+function DebtPage({T,debts,setDebts,loanBudget}){
 const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal<=0||d.status==="paid");
 const totalDebt=active.reduce((s,d)=>s+(d.bal||0),0);
 const totalMonthly=active.reduce((s,d)=>s+(d.minPay||0),0);
@@ -1186,12 +1303,20 @@ while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()
 pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:0});
 return{...d,pts,freeDate:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,months:m}});
 
-// Combined forecast chart
-const maxMonths=Math.max(...payoffs.map(p=>p.months),12);
+// Payoff plan: order + extra, remembered on this device
+const readPlanPref=()=>{try{return JSON.parse(localStorage.getItem(PLAN_KEY)||"{}")||{}}catch{return{}}};
+const[planStrat,setPlanStrat]=useState(()=>{const s=readPlanPref().strategy;return STRATEGIES[s]?s:"avalanche"});
+const[planExtra,setPlanExtra]=useState(()=>{const x=+readPlanPref().extra;return Number.isFinite(x)&&x>=0?x:100});
+useEffect(()=>{try{localStorage.setItem(PLAN_KEY,JSON.stringify({strategy:planStrat,extra:planExtra}))}catch(err){console.warn("[debt-plan] preference not saved",err)}},[planStrat,planExtra]);
+const plan=useMemo(()=>planPayoff(debts,{strategy:planStrat,extra:planExtra}),[debts,planStrat,planExtra]);
+const planBy=Object.fromEntries(plan.order.map((st,i)=>[st.id,{...st,rank:i+1}]));
+
+// Combined forecast chart: minimums only (each debt on its own) vs the plan
+const maxMonths=Math.max(...payoffs.map(p=>p.months),plan.done?plan.months:0,12);
 const combined=Array.from({length:Math.min(maxMonths+1,60)},(_,i)=>{const dt=new Date();dt.setMonth(dt.getMonth()+i);
 const label=`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`;
 let total=0;active.forEach(d=>{if((d.minPay||0)>0){const r=d.rate/100/12;let rem=d.bal;for(let j=0;j<i;j++){rem=rem+rem*r-d.minPay;if(rem<=0){rem=0;break}}total+=Math.max(0,rem)}else{total+=d.bal}});
-return{mo:label,debt:Math.round(total)}});
+return{mo:label,debt:Math.round(total),plan:Math.round(plan.totals[i]??0)}});
 
 return(<div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14}}>
@@ -1212,14 +1337,22 @@ return(<div>
 <button onClick={addDebt} style={btnS(T,true)}><Check size={12}/></button></div></div>}
 
 {combined.length>1&&<div style={{...glass(T),marginBottom:14}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
 <div style={lbl(T)}>Total Debt Forecast</div>
+<div style={{display:"flex",gap:12,fontSize:10,color:T.textMuted,marginBottom:6}}>
+<span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:3,borderRadius:2,background:T.success}}/>Your plan</span>
+<span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:12,height:3,borderRadius:2,background:T.warn}}/>Minimums only</span></div></div>
 <ResponsiveContainer width="100%" height={180}>
-<AreaChart data={combined}><defs><linearGradient id="dfg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient></defs>
+<AreaChart data={combined}><defs><linearGradient id="dfg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient>
+<linearGradient id="dpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.success} stopOpacity={.28}/><stop offset="100%" stopColor={T.success} stopOpacity={0}/></linearGradient></defs>
 <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
 <XAxis dataKey="mo" tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} interval={Math.max(1,Math.floor(combined.length/8))}/>
 <YAxis tick={{fontSize:8,fill:T.textDim}} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(1)}k`}/>
-<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={v=>[fmt(v),"Debt"]}/>
-<Area type="monotone" dataKey="debt" stroke={T.warn} strokeWidth={2} fill="url(#dfg)"/></AreaChart></ResponsiveContainer></div>}
+<Tooltip contentStyle={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,fontSize:10,color:T.text}} formatter={(v,k)=>[fmt(v),k==="plan"?"Your plan":"Minimums only"]}/>
+<Area type="monotone" dataKey="debt" stroke={T.warn} strokeWidth={2} fill="url(#dfg)"/>
+<Area type="monotone" dataKey="plan" stroke={T.success} strokeWidth={2.5} fill="url(#dpg)"/></AreaChart></ResponsiveContainer></div>}
+
+{plan.order.length>0&&<PayoffPlan T={T} debts={debts} plan={plan} strategy={planStrat} setStrategy={setPlanStrat} extra={planExtra} setExtra={setPlanExtra} loanBudget={loanBudget}/>}
 
 {payoffs.map(d=>(
 <div key={d.id} style={{...glass(T),marginBottom:12}}>
@@ -1228,7 +1361,9 @@ return(<div>
 <div style={{fontSize:11,color:T.textDim}}>{d.rate}% APR • {fmt(d.minPay)}/mo{d.note?` • ${d.note}`:""}</div></div>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
 <div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:800,fontFamily:"'Space Mono',monospace",color:T.warn}}>{fmt(d.bal)}</div>
-<div style={pill(T.infoBg,T.info)}>Free {d.freeDate} ({d.months}mo)</div></div>
+<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+{planBy[d.id]?.payoffMonth&&<div style={pill(T.successBg,T.success)}>#{planBy[d.id].rank} in plan · {moAhead(planBy[d.id].payoffMonth)}</div>}
+<div style={pill(T.infoBg,T.info)}>Minimum only: {d.freeDate} ({d.months}mo)</div></div></div>
 <div style={{display:"flex",flexDirection:"column",gap:2}}>
 <button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}} title="Edit"><Edit3 size={12}/></button>
 <button onClick={()=>markPaid(d.id)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",opacity:.4}} title="Mark paid off"><Check size={12}/></button>
@@ -1246,7 +1381,8 @@ return(<div>
 {active.filter(d=>!d.minPay||d.minPay===0).map((d,i,arr)=><div key={d.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
 <div style={{flex:1}}>
 <div style={{fontSize:13,fontWeight:600}}>{d.name||"Unknown"}</div>
-<div style={{fontSize:10,color:T.textDim}}>{d.rate?d.rate+"% APR • ":""}No active payments{d.note?` • ${d.note}`:""}</div></div>
+<div style={{fontSize:10,color:T.textDim}}>{d.rate?d.rate+"% APR • ":""}No active payments{d.note?` • ${d.note}`:""}</div>
+{planBy[d.id]?.payoffMonth&&<div style={{...pill(T.successBg,T.success),marginTop:4}}>#{planBy[d.id].rank} in plan · {moAhead(planBy[d.id].payoffMonth)}</div>}</div>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
 <span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn,fontSize:16}}>{fmt(d.bal)}</span>
 <button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}} title="Edit"><Edit3 size={12}/></button>
@@ -1257,22 +1393,6 @@ return(<div>
 <div style={lbl(T)}>Eliminated 💀</div>
 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
 {paid.map(d=><div key={d.id} style={{...pill(T.successBg,T.success),fontSize:11,padding:"6px 12px",textDecoration:"line-through",opacity:.7}}>{d.name||d.id}</div>)}</div></div>}
-
-{active.filter(d=>(d.minPay||0)>0).length>0&&<div style={{...glass(T),marginBottom:14}}>
-<div style={lbl(T)}>What If? Extra Payment Simulator</div>
-{[50,100,200].map(extra=>{const scenarios=active.filter(d=>(d.minPay||0)>0).map(d=>{const r=d.rate/100/12;let rem=d.bal;let m=0;while(rem>0&&m<120){rem=rem+rem*r-(d.minPay+extra/active.filter(x=>x.minPay>0).length);m++}return m});
-const maxMo=Math.max(...scenarios);const baseMo=Math.max(...payoffs.map(p=>p.months));const saved=baseMo-maxMo;
-const totalInt=(extra2)=>active.filter(d=>(d.minPay||0)>0).reduce((s,d)=>{const r=d.rate/100/12;let rem=d.bal;let intT=0;let m=0;const pay=d.minPay+extra2/active.filter(x=>x.minPay>0).length;while(rem>0&&m<120){const i=rem*r;intT+=i;rem=rem+i-pay;m++}return s+Math.max(intT,0)},0);
-const intSaved=totalInt(0)-totalInt(extra);
-return<div key={extra} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
-<div style={{fontSize:14,fontWeight:800,color:T.success,fontFamily:"'Space Mono',monospace",minWidth:60}}>+{fmt(extra)}</div>
-<div><div style={{fontSize:12,fontWeight:600}}>extra/month</div>
-<div style={{fontSize:10,color:T.textDim}}>split across active debts</div></div></div>
-<div style={{display:"flex",gap:16,alignItems:"center"}}>
-<div style={{textAlign:"right"}}><div style={{fontSize:8,color:T.textDim}}>FREE</div><div style={{fontSize:13,fontWeight:700,color:T.success}}>{saved}mo sooner</div></div>
-<div style={{textAlign:"right"}}><div style={{fontSize:8,color:T.textDim}}>INT SAVED</div><div style={{fontSize:13,fontWeight:700,color:T.info}}>{fmt(intSaved)}</div></div></div></div>})}
-</div>}
 
 {editId&&<Modal onClose={()=>setEditId(null)} T={T}>
 <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>Edit Debt</div>
@@ -2277,7 +2397,7 @@ const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} setDashWidgets={setDashWidgets} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,history,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs,exitDate,exitLabel}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider} customSplits={customSplits} setCustomSplits={setCustomSplits} userCards={userCards} splitPartner={splitPartner} undoStack={undoStack} setUndoStack={setUndoStack}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
-case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts}/>;
+case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts} loanBudget={cats.find(c=>c.id==="loan")?.budget||0}/>;
 case"sav":return<SavingsPage T={T} bal={bal} setBal={setBal} cur={cur} savAccounts={savAccounts} setSavAccounts={setSavAccounts}/>;
 case"sub":return<BillsPage T={T} splitPartner={splitPartner} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal} varCap={varCap} setVarCap={setVarCap}/>;
 case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} customSplits={customSplits} setCustomSplits={setCustomSplits} recurringSplits={recurringSplits} setRecurringSplits={setRecurringSplits} mo={mo} billsPaid={billsPaid} billActuals={billActuals} splitPartner={splitPartner}/>;

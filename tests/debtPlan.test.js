@@ -91,6 +91,10 @@ test("rollover: once Visa clears in month 12, the store card gets $866 minus the
   assert.equal(visa.rollsTo.id, "store");
   // month 13: car $245 and student $160 keep their own payments, the store card gets the rest
   near(visa.rollsTo.gets, 866 - 245 - 160);
+  // the extra hits Visa from month 1; the store card only once Visa is gone
+  assert.equal(visa.boostFrom, 1);
+  assert.equal(byId(p).store.boostFrom, 12); // month 12's leftover after Visa's last payment
+  assert.equal(byId(p).car.boostFrom, 14);
 });
 
 test("the monthly total never drops until the last month", () => {

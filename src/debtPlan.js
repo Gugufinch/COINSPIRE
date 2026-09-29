@@ -157,6 +157,9 @@ export function planPayoff(debts, opts = {}) {
         }
       }
     }
+    // First month this debt got more than its own payment: when the extra
+    // (and any rollover) reached it. null if it cleared on its own payment.
+    const bi = payHist[k].findIndex((amt) => amt > d.minPay + EPS);
     return {
       id: d.id,
       name: d.name,
@@ -165,6 +168,7 @@ export function planPayoff(debts, opts = {}) {
       minPay: d.minPay,
       hold: d.hold,
       payoffMonth: pm,
+      boostFrom: bi === -1 ? null : bi + 1,
       interest: round2(interest[k]),
       paid: round2(paid[k]),
       firstPayment: round2(payHist[k][0] || 0),
