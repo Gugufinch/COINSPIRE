@@ -15,7 +15,7 @@ import {
   MessageCircle, Send, Hash
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
-import { planPayoff, compareStrategies, STRATEGIES } from "./debtPlan.js";
+import { planPayoff, compareStrategies, parseExtraInput, STRATEGIES } from "./debtPlan.js";
 
 // ── Supabase + RLS-aware token transport ──
 // Server-side RLS gates every read/write of user_data and user_pins on a
@@ -1179,7 +1179,7 @@ const MONO="'Space Mono',monospace";
 
 function PayoffPlan({T,debts,plan,strategy,setStrategy,extra,setExtra,loanBudget}){
 const cmp=useMemo(()=>compareStrategies(debts,extra),[debts,extra]);
-const presets=useMemo(()=>{const lb=Math.round(+loanBudget||0);const base=[0,50,100,200,300].map(amt=>({amt,note:amt===0?"no extra":""}));
+const presets=useMemo(()=>{const lb=Math.round(+loanBudget||0);const base=[0,50,100,200,300].map(amt=>({amt,note:""}));
 if(lb>0){const hit=base.find(p=>p.amt===lb);if(hit)hit.note="Extra Loan budget";else base.push({amt:lb,note:"Extra Loan budget"})}
 return base.sort((a,b)=>a.amt-b.amt)},[loanBudget]);
 const rows=useMemo(()=>presets.map(p=>({...p,plan:planPayoff(debts,{strategy,extra:p.amt})})),[presets,debts,strategy]);
@@ -1187,7 +1187,7 @@ const zero=rows.find(r=>r.amt===0)?.plan;
 const isPreset=presets.some(p=>p.amt===extra);
 const[custom,setCustom]=useState(isPreset?"":String(extra));
 const pickPreset=(amt)=>{setExtra(amt);setCustom("")};
-const typeCustom=(v)=>{setCustom(v);const n=parseFloat(v);if(Number.isFinite(n)&&n>=0)setExtra(Math.min(Math.round(n*100)/100,1000000));else if(v==="")setExtra(0)};
+const typeCustom=(raw)=>{const{text,value}=parseExtraInput(raw);setCustom(text);if(value!==null)setExtra(value)};
 
 // One plain sentence on what the other order would change.
 const other=()=>{const sel=cmp[strategy],av=cmp.avalanche,sn=cmp.snowball;
@@ -1200,8 +1200,7 @@ if(same(sel,av))return"Same order as Avalanche on these debts, so it costs nothi
 const d=sel.totalInterest-av.totalInterest;const mo=sel.months-av.months;
 return`${usd0(d)} more interest than Avalanche${mo>0?` and ${mo} month${mo>1?"s":""} longer`:""}${sel.firstWin&&av.firstWin&&sel.firstWin<av.firstWin?`, for a first payoff in month ${sel.firstWin} instead of ${av.firstWin}`:""}.`};
 
-const seg=(on)=>({minHeight:60,padding:"10px 6px",borderRadius:12,border:`1px solid ${on?T.success:T.border}`,background:on?T.successBg:"transparent",color:T.text,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,fontFamily:"inherit",transition:"all .15s"});
-const rowS=(on)=>({width:"100%",minHeight:52,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"8px 12px",borderRadius:12,border:`1px solid ${on?T.success:"transparent"}`,background:on?T.successBg:"transparent",color:T.text,cursor:"pointer",textAlign:"left",fontFamily:"inherit",transition:"all .15s"});
+const seg=(on)=>({minHeight:60,minWidth:0,padding:"10px 6px",borderRadius:12,border:`1px solid ${on?T.success:T.border}`,background:on?T.successBg:"transparent",color:T.text,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,fontFamily:"inherit",transition:"all .15s"});
 const span=Math.max(1,plan.months);
 const waitBg=`repeating-linear-gradient(135deg,${T.textDim}66 0 3px,transparent 3px 6px)`;
 
@@ -1231,37 +1230,36 @@ return(<div data-plan style={{...glass(T),marginBottom:14}}>
 <button key={k} role="radio" aria-checked={on} onClick={()=>setStrategy(k)} style={seg(on)}>
 <span style={{fontSize:12,fontWeight:700,color:on?T.success:T.text}}>{st.label}</span>
 <span style={{fontSize:12,fontWeight:700,fontFamily:MONO,color:on?T.text:T.textMuted}}>{c.done?usd0(c.totalInterest):"never"}</span>
-<span style={{fontSize:10,color:T.textDim}}>{c.done?`free ${moAhead(c.months)}`:""}</span></button>)})}</div>
+<span style={{fontSize:11,color:T.textDim}}>{c.done?`free ${moAhead(c.months)}`:""}</span></button>)})}</div>
 <div style={{fontSize:12,color:T.textMuted,marginTop:8,lineHeight:1.45}}><strong style={{color:T.text}}>{STRATEGIES[strategy].rule}.</strong> {STRATEGIES[strategy].why}{other()?<><br/><span style={{color:T.textDim}}>{other()}</span></>:null}</div>
 
-{/* extra each month: every row is a what-if, tap to use it */}
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginTop:18,marginBottom:6}}>
-<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Extra each month</div>
-<div style={{fontSize:10,color:T.textDim}}>vs no extra</div></div>
-<div style={{display:"grid",gap:2}}>
-{rows.map(r=>{const on=r.amt===extra&&!custom;const p=r.plan;const dm=zero&&zero.done&&p.done?zero.months-p.months:null;const di=zero&&zero.done&&p.done?zero.totalInterest-p.totalInterest:null;return(
-<button key={r.amt} onClick={()=>pickPreset(r.amt)} aria-pressed={on} style={rowS(on)}>
-<span style={{display:"flex",flexDirection:"column"}}>
-<span style={{fontSize:14,fontWeight:800,fontFamily:MONO,color:on?T.success:T.text}}>+{usd0(r.amt)}</span>
-{r.note&&<span style={{fontSize:10,color:T.textDim}}>{r.note}</span>}</span>
-<span style={{display:"flex",flexDirection:"column",alignItems:"flex-end"}}>
-<span style={{fontSize:13,fontWeight:700}}>{p.done?<>{moAhead(p.months)} <span style={{color:T.textDim,fontWeight:500,fontSize:11}}>· {p.months} mo</span></>:<span style={{color:T.danger}}>never</span>}</span>
-{r.amt>0&&dm!=null&&<span style={{fontSize:11,color:on?T.text:T.textMuted}}>{dm} mo sooner · {usd0(di)} less interest</span>}
-{r.amt===0&&p.done&&<span style={{fontSize:11,color:T.textDim}}>rollover alone</span>}</span></button>)})}
-<label style={{...rowS(!!custom),cursor:"text"}}>
-<span style={{fontSize:12,fontWeight:600,color:custom?T.success:T.textMuted}}>Other amount</span>
-<span style={{display:"flex",alignItems:"center",gap:6}}>
-{custom&&plan.done&&<span style={{fontSize:11,color:T.textMuted}}>{moAhead(plan.months)}</span>}
-<span style={{position:"relative"}}><span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:T.textDim}}>$</span>
-<input type="number" inputMode="decimal" min="0" step="10" placeholder="0" value={custom} onChange={e=>typeCustom(e.target.value)} aria-label="Other extra amount per month" style={{...inpS(T),width:110,minHeight:44,paddingLeft:22,fontFamily:MONO,fontSize:16,textAlign:"right"}}/></span></span></label>
+{/* extra each month: every chip is a what-if with its debt-free month, tap to use it.
+   Chips, not rows, so on a phone the hero, the order and the extra sit on one screen
+   and the staircase starts right under them. */}
+<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginTop:18,marginBottom:6}}>Extra each month</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6}}>
+{rows.map(r=>{const on=r.amt===extra&&!custom;const p=r.plan;return(
+<button key={r.amt} onClick={()=>pickPreset(r.amt)} aria-pressed={on} style={seg(on)}>
+<span style={{fontSize:15,fontWeight:800,fontFamily:MONO,color:on?T.success:T.text}}>+{usd0(r.amt)}</span>
+<span style={{fontSize:12,fontWeight:600,color:p.done?(on?T.text:T.textMuted):T.danger}}>{p.done?moAhead(p.months):"never"}</span>
+{r.note==="Extra Loan budget"&&<span style={{fontSize:11,color:T.textDim}}>loan budget</span>}</button>)})}
+<label data-other style={{...seg(!!custom),cursor:"text",gridColumn:`span ${3-(presets.length%3)}`}}>
+<span style={{display:"flex",alignItems:"baseline",justifyContent:"center",width:"100%"}}>
+{custom&&<span style={{fontSize:15,fontWeight:800,fontFamily:MONO,color:T.success}}>+$</span>}
+<input type="text" inputMode="decimal" autoComplete="off" enterKeyHint="done" placeholder="Other" value={custom} onChange={e=>typeCustom(e.target.value)} aria-label="Other extra amount per month"
+style={{width:custom?`${Math.min(9,Math.max(2,custom.length))+1}ch`:"100%",minWidth:0,background:"transparent",border:"none",outline:"none",padding:0,color:custom?T.success:T.text,fontFamily:MONO,fontSize:16,fontWeight:800,textAlign:custom?"left":"center",lineHeight:1.2}}/></span>
+<span style={{fontSize:12,fontWeight:600,color:custom?T.text:T.textDim}}>{custom?(plan.done?moAhead(plan.months):"never"):"any amount"}</span></label>
 </div>
+{plan.done&&<div aria-live="polite" style={{fontSize:12,color:T.textMuted,marginTop:8,lineHeight:1.45}}>{extra<=0?<>No extra: the rollover alone gets you there.</>
+:zero&&zero.done?<><strong style={{color:T.text,fontFamily:MONO}}>+{usd0(extra)}</strong> a month beats no extra by <strong style={{color:T.text}}>{zero.months-plan.months} months</strong> and <strong style={{color:T.text}}>{usd0(zero.totalInterest-plan.totalInterest)}</strong> of interest.</>
+:<>Without extra it never clears. <strong style={{color:T.text,fontFamily:MONO}}>+{usd0(extra)}</strong> a month makes it {plan.months} months.</>}</div>}
 </div>
 
 {/* the order, as a staircase: own payment, then the extra and rollover arrive, then gone */}
 <div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
 <div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Who gets paid off when</div>
-{plan.done&&<div style={{display:"flex",gap:10,fontSize:10,color:T.textDim}}>
+{plan.done&&<div style={{display:"flex",gap:10,fontSize:11,color:T.textDim}}>
 <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:T.warn,opacity:.5}}/>own payment</span>
 {plan.order.some(st=>st.hold)&&<span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:waitBg}}/>on hold</span>}
 <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:T.success}}/>extra + rollover</span></div>}</div>

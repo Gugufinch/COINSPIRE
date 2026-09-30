@@ -75,6 +75,18 @@ export function orderDebts(list, strategy = "avalanche", extra = 0) {
   return [...head, ...tail];
 }
 
+// What someone typed in "Other": keep digits and the first decimal point, cap the
+// length, and read the amount. value is null while the text is not a number yet (".").
+export function parseExtraInput(raw) {
+  const text = String(raw ?? "")
+    .replace(/[^0-9.]/g, "")
+    .replace(/(\..*)\./g, "$1")
+    .slice(0, 9);
+  if (text === "") return { text, value: 0 };
+  const n = parseFloat(text);
+  return { text, value: Number.isFinite(n) ? Math.min(Math.round(n * 100) / 100, 1000000) : null };
+}
+
 // Simulate the plan month by month.
 // Returns months to debt-free (payments made), total interest, whether it
 // finishes inside maxMonths, the ordered debts with their payoff month, and

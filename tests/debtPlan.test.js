@@ -5,7 +5,7 @@
 // $566 of monthly payments plus $300 extra = $866 a month.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planPayoff, compareStrategies, orderDebts, normalizeDebts } from "../src/debtPlan.js";
+import { planPayoff, compareStrategies, orderDebts, normalizeDebts, parseExtraInput } from "../src/debtPlan.js";
 
 const DEBTS = [
   { id: "visa", name: "Visa", bal: 4200, rate: 24.99, minPay: 126, status: "active" },
@@ -181,4 +181,18 @@ test("zero APR and ties keep a stable order", () => {
   const p = planPayoff(list, { extra: 25 });
   assert.equal(p.totalInterest, 0);
   assert.equal(p.months, 12); // $1,200 at $100 a month
+});
+
+test("the Other amount box reads what a phone keyboard can type", () => {
+  assert.deepEqual(parseExtraInput("250"), { text: "250", value: 250 });
+  assert.deepEqual(parseExtraInput("$1,200"), { text: "1200", value: 1200 });
+  assert.deepEqual(parseExtraInput("12.50"), { text: "12.50", value: 12.5 });
+  assert.deepEqual(parseExtraInput("12.5.6"), { text: "12.56", value: 12.56 });
+  assert.deepEqual(parseExtraInput("-40"), { text: "40", value: 40 });
+  assert.deepEqual(parseExtraInput(""), { text: "", value: 0 });
+  assert.deepEqual(parseExtraInput("abc"), { text: "", value: 0 });
+  assert.deepEqual(parseExtraInput("."), { text: ".", value: null }); // mid-typing: keep the last amount
+  assert.equal(parseExtraInput("999999999999").text.length, 9);
+  // what it feeds the planner is the same as picking the preset
+  assert.equal(planPayoff(DEBTS, { extra: parseExtraInput("300").value }).months, 39);
 });
