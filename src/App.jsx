@@ -1269,7 +1269,7 @@ return(<div key={st.id} role="listitem" aria-posinset={i+1} aria-setsize={plan.o
 <div style={group}>Pay first</div>
 <div role="radiogroup" aria-label="Payoff order" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:4,padding:4,borderRadius:14,border:`1px solid ${T.border}`}}>
 {Object.entries(STRATEGIES).map(([k,st])=>{const on=k===strategy;const c=cmp[k];const dup=sameAs(k);const pick=rec&&!rec.same&&rec.pick===k;return(
-<button key={k} role="radio" aria-checked={on} aria-label={`${st.label}${pick?", our pick":""}: ${c.done?`${usd0(c.totalInterest)} of interest`:"never paid off"}`} onClick={()=>setStrategy(k)} style={{...segBtn(on),position:"relative"}}>
+<button key={k} role="radio" aria-checked={on} aria-label={`${st.label}${pick?", our pick":""}: ${c.done?`${usd0(c.totalInterest)} of interest, ${dup?`same as ${dup}`:`debt-free ${moAheadLong(c.months)}`}`:"never paid off"}`} onClick={()=>setStrategy(k)} style={{...segBtn(on),position:"relative"}}>
 {pick&&<span aria-hidden style={{position:"absolute",top:-13,left:"50%",transform:"translateX(-50%)",padding:"1px 7px",borderRadius:6,background:T.card,border:`1px solid ${T.success}`,color:T.success,fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",lineHeight:"13px",whiteSpace:"nowrap"}}>our pick</span>}
 <span style={{fontSize:13,fontWeight:700,color:on?T.success:T.text}}>{st.label}</span>
 <span style={{fontSize:12,fontWeight:700,fontFamily:MONO,color:on?T.text:T.textMuted}}>{c.done?usd0(c.totalInterest):"never"}</span>
