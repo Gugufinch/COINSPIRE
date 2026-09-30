@@ -515,7 +515,7 @@ return<div style={{...glass(T),borderLeft:`3px solid ${left>0?T.success:T.danger
 <div style={{fontSize:28,fontWeight:900,fontFamily:"'Space Mono',monospace",color:left>0?T.success:T.danger,marginBottom:8}}>{fmt(left)}</div>
 <div style={{display:"flex",gap:4,marginBottom:10}}>
 {[{l:"Income",v:cur.inc,c:T.success},{l:"Fixed",v:fixB,c:T.info},{l:"Var Cap",v:varC,c:T.warn},{l:"Spent",v:totS,c:T.danger}].map((s,i)=>(
-<div key={i} style={{flex:Math.max(s.v,1)/cur.inc,background:s.c+"15",borderRadius:6,padding:"4px 3px",textAlign:"center",minWidth:30}}>
+<div key={i} style={{flex:Math.max(s.v,1)/(cur.inc||1),background:s.c+"15",borderRadius:6,padding:"4px 3px",textAlign:"center",minWidth:30}}>
 <div style={{fontSize:7,color:s.c,fontWeight:700}}>{s.l}</div>
 <div style={{fontSize:9,fontWeight:700,fontFamily:"'Space Mono',monospace",color:s.c}}>{fmt(s.v)}</div></div>))}</div>
 <PBar pct={Math.min(pct,100)} color={pct>90?T.danger:pct>70?T.warn:T.success} height={4} bg={T.border}/>
