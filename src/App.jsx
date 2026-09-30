@@ -1195,9 +1195,11 @@ const same=(a,b)=>a.order.map(s=>s.id).join()===b.order.map(s=>s.id).join();
 if(!sel?.done)return null;
 if(strategy==="avalanche"){if(same(av,sn))return"Snowball picks the same order on these debts.";
 const d=sn.totalInterest-av.totalInterest;
+if(d<1)return"Snowball costs the same here, within a dollar.";
 return sn.firstWin&&av.firstWin&&sn.firstWin<av.firstWin?`Snowball would clear a debt by month ${sn.firstWin} (this plan: month ${av.firstWin}) for ${usd0(d)} more interest.`:`Snowball would cost ${usd0(d)} more interest.`}
 if(same(sel,av))return"Same order as Avalanche on these debts, so it costs nothing extra.";
 const d=sel.totalInterest-av.totalInterest;const mo=sel.months-av.months;
+if(d<1&&mo<=0)return"Within a dollar of Avalanche's interest on these debts.";
 return`${usd0(d)} more interest than Avalanche${mo>0?` and ${mo} month${mo>1?"s":""} longer`:""}${sel.firstWin&&av.firstWin&&sel.firstWin<av.firstWin?`, for a first payoff in month ${sel.firstWin} instead of ${av.firstWin}`:""}.`};
 
 // A strategy whose order is identical to an earlier one says so, instead of
