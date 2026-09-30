@@ -1305,18 +1305,18 @@ style={{width:custom?`${Math.min(9,Math.max(2,custom.length))+1}ch`:"100%",minWi
 <div style={{fontSize:12,color:T.textDim,lineHeight:1.45}}>What to pay each debt, and the balance left at the end of each step.</div></div>
 <div style={{flex:"1 1 420px",minWidth:0}}>
 <div style={{overflowX:"auto",width:0,minWidth:"100%"}}>
-<table style={{width:"100%",minWidth:62+plan.order.length*58,tableLayout:"fixed",borderCollapse:"collapse",fontVariantNumeric:"tabular-nums"}}>
+<table style={{width:"100%",minWidth:62+plan.order.length*58,tableLayout:"fixed",borderCollapse:"separate",borderSpacing:0,fontVariantNumeric:"tabular-nums"}}>
 <thead><tr>
 <th scope="col" style={{width:62,position:"sticky",left:0,zIndex:1,background:T.card,textAlign:"left",fontSize:11,fontWeight:600,color:T.textDim,padding:"4px 6px 6px 0",verticalAlign:"bottom"}}>When</th>
 {plan.order.map(st=><th key={st.id} scope="col" style={{textAlign:"right",fontSize:11,fontWeight:600,color:T.textMuted,padding:"4px 0 6px 8px",verticalAlign:"bottom",lineHeight:1.25}}>{st.name}</th>)}
 </tr></thead>
 <tbody>{(allSteps?steps:steps.slice(0,1)).map((s,i)=>(
-<tr key={s.from} style={{borderTop:`1px solid ${T.border}`}}>
-<th scope="row" aria-label={s.months>1?`${moAheadLong(s.from)} to ${moAheadLong(s.to)}, ${s.months} months`:moAheadLong(s.from)} style={{position:"sticky",left:0,zIndex:1,background:T.card,textAlign:"left",padding:"8px 6px 8px 0",verticalAlign:"top",whiteSpace:"nowrap"}}>
+<tr key={s.from}>
+<th scope="row" aria-label={s.months>1?`${moAheadLong(s.from)} to ${moAheadLong(s.to)}, ${s.months} months`:moAheadLong(s.from)} style={{position:"sticky",left:0,zIndex:1,background:T.card,borderTop:`1px solid ${T.border}`,textAlign:"left",padding:"8px 6px 8px 0",verticalAlign:"top",whiteSpace:"nowrap"}}>
 <div style={{fontSize:13,fontWeight:700,color:T.text}}>{moAhead(s.from)}</div>
 {s.months>1&&<div style={{fontSize:11,fontWeight:500,color:T.textDim}}>to {moAhead(s.to)}</div>}</th>
 {plan.order.map((st,k)=>{const pay=s.pay[k];const gone=s.cleared.includes(st.id);const pot=s.pot.includes(st.id);return(
-<td key={st.id} style={{textAlign:"right",padding:"8px 0 8px 8px",verticalAlign:"top",whiteSpace:"nowrap",fontFamily:MONO}}>
+<td key={st.id} style={{borderTop:`1px solid ${T.border}`,textAlign:"right",padding:"8px 0 8px 8px",verticalAlign:"top",whiteSpace:"nowrap",fontFamily:MONO}}>
 {pay>.005&&<><div style={{fontSize:13,fontWeight:700,color:pot?T.success:T.text}}>{usd0(pay)}</div>
 <div style={{fontSize:11,color:gone?T.success:T.textDim,fontFamily:gone?"'Outfit','DM Sans',sans-serif":MONO,fontWeight:gone?700:400}}>{gone?"paid off":usd0(s.left[k])}</div></>}</td>)})}
 </tr>))}</tbody></table></div>
