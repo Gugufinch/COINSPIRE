@@ -158,12 +158,14 @@ export function planPayoff(debts, opts = {}) {
   const done = !open();
   const steps = order.map((d, k) => {
     const pm = payoffMonth[k];
-    // Where this debt's money goes next: the first debt later in the order
-    // that is still open after this one clears, and what it gets the month after.
+    // Where this debt's money goes next: the pot always goes to the first open
+    // debt in the order, so that is the first debt (earlier or later in the
+    // order than this one) still open after it clears, and what it gets the
+    // month after. A debt later in the order can clear first on its own payment.
     let rollsTo = null;
     if (pm !== null && pm < m) {
-      for (let j = k + 1; j < order.length; j++) {
-        if (payoffMonth[j] === null || payoffMonth[j] > pm) {
+      for (let j = 0; j < order.length; j++) {
+        if (j !== k && (payoffMonth[j] === null || payoffMonth[j] > pm)) {
           rollsTo = { id: order[j].id, name: order[j].name, gets: round2(payHist[j][pm] || 0) };
           break;
         }
@@ -172,6 +174,9 @@ export function planPayoff(debts, opts = {}) {
     // First month this debt got more than its own payment: when the extra
     // (and any rollover) reached it. null if it cleared on its own payment.
     const bi = payHist[k].findIndex((amt) => amt > d.minPay + EPS);
+    // The most it gets in one whole month before its last (partial) payment:
+    // its own payment plus the pot once the extra and the rollover reach it.
+    const whole = payHist[k].slice(0, pm ? Math.max(1, pm - 1) : undefined);
     return {
       id: d.id,
       name: d.name,
@@ -184,6 +189,7 @@ export function planPayoff(debts, opts = {}) {
       interest: round2(interest[k]),
       paid: round2(paid[k]),
       firstPayment: round2(payHist[k][0] || 0),
+      topPay: round2(whole.length ? Math.max(...whole) : 0),
       rollsTo,
     };
   });

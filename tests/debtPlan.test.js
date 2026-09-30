@@ -196,3 +196,37 @@ test("the Other amount box reads what a phone keyboard can type", () => {
   // what it feeds the planner is the same as picking the preset
   assert.equal(planPayoff(DEBTS, { extra: parseExtraInput("300").value }).months, 39);
 });
+
+test("the pot grows down the order: each debt's full monthly payment once the money reaches it", () => {
+  const av = planPayoff(DEBTS, { strategy: "avalanche", extra: 300 });
+  assert.deepEqual(av.order.map((s) => s.topPay), [426, 461, 706, 866]);
+  assert.equal(av.order.at(-1).topPay, av.budget);
+  // snowball: store card first, it gets its own $35 plus the $300
+  const sn = planPayoff(DEBTS, { strategy: "snowball", extra: 300 });
+  assert.equal(sn.order[0].id, "store");
+  assert.equal(sn.order[0].topPay, 335);
+  assert.equal(sn.order.at(-1).topPay, 866);
+  // no extra: the car and store card clear on their own first, and their
+  // payments reach Visa in month 46, so Visa tops out at 126 + 245 + 35
+  const none = planPayoff(DEBTS, { strategy: "avalanche", extra: 0 });
+  assert.equal(none.order[0].topPay, 406);
+  assert.equal(none.order[0].boostFrom, 46);
+});
+
+test("rollover goes to the first debt still open in the order, even one earlier in it", () => {
+  // No extra: the car (month 46) and the store card (month 48) clear on their
+  // own payments before Visa, which is first in the avalanche. Their money goes
+  // to Visa, not on down the list to the student loan.
+  const p = planPayoff(DEBTS, { strategy: "avalanche", extra: 0 });
+  const s = byId(p);
+  assert.equal(s.car.payoffMonth, 46);
+  assert.equal(s.store.payoffMonth, 48);
+  assert.equal(s.visa.boostFrom, 46);
+  assert.equal(s.car.rollsTo.id, "visa");
+  near(s.car.rollsTo.gets, 126 + 245);
+  assert.equal(s.store.rollsTo.id, "visa");
+  near(s.store.rollsTo.gets, 126 + 245 + 35);
+  assert.equal(s.visa.rollsTo.id, "student");
+  assert.equal(s.visa.topPay, 406);
+  assert.equal(s.student.rollsTo, null);
+});
