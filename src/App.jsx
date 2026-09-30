@@ -1218,7 +1218,7 @@ return(<div data-plan style={{...glass(T),marginBottom:14}}>
 :<div><div style={{fontSize:22,fontWeight:800,fontFamily:MONO,color:T.danger,lineHeight:1.2}}>Not in 50 years</div>
 <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>The payments don't cover the interest. Add extra below or raise a payment.</div></div>}
 {plan.done&&<div style={{display:"flex",gap:18,marginTop:10,flexWrap:"wrap"}}>
-{[["Months",plan.months,T.text],["Interest",usd0(plan.totalInterest),T.warn],["Each month",usd0(plan.budget),T.info]].map(([l,v,c])=><div key={l}>
+{[["Months",plan.months,T.text],["Interest",usd0(plan.totalInterest),T.warn]].map(([l,v,c])=><div key={l}>
 <div style={{fontSize:9,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{l}</div>
 <div style={{fontSize:16,fontWeight:700,fontFamily:MONO,color:c}}>{v}</div></div>)}</div>}
 </div>
