@@ -5,7 +5,7 @@
 // $566 of monthly payments plus $300 extra = $866 a month.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planPayoff, compareStrategies, orderDebts, normalizeDebts, parseExtraInput } from "../src/debtPlan.js";
+import { planPayoff, compareStrategies, orderDebts, normalizeDebts, parseExtraInput, paymentSteps, recommend } from "../src/debtPlan.js";
 
 const DEBTS = [
   { id: "visa", name: "Visa", bal: 4200, rate: 24.99, minPay: 126, status: "active" },
@@ -229,4 +229,75 @@ test("rollover goes to the first debt still open in the order, even one earlier 
   assert.equal(s.visa.rollsTo.id, "student");
   assert.equal(s.visa.topPay, 406);
   assert.equal(s.student.rollsTo, null);
+});
+
+// ── month by month: the action plan and the tracking table the post's prompt asks for ──
+
+test("month by month: 39 months fold into 8 steps, each debt's last payment its own step", () => {
+  const p = planPayoff(DEBTS, { strategy: "avalanche", extra: 300 });
+  assert.equal(p.schedule.length, 39);
+  const steps = paymentSteps(p);
+  assert.deepEqual(steps.map((s) => [s.from, s.to]), [[1, 11], [12, 12], [13, 13], [14, 14], [15, 23], [24, 24], [25, 38], [39, 39]]);
+  assert.equal(steps.reduce((n, s) => n + s.months, 0), 39);
+  // what to pay this month (order: visa, store, car, student)
+  assert.deepEqual(steps[0].pay, [426, 35, 245, 160]);
+  assert.deepEqual(steps[0].pot, ["visa"]);
+  // Visa's last payment, and the rest of the pot already on the store card
+  assert.deepEqual(steps[1].pay, [64.42, 396.58, 245, 160]);
+  assert.deepEqual(steps[1].cleared, ["visa"]);
+  assert.deepEqual(steps[4].pay, [0, 0, 706, 160]);
+  assert.deepEqual(steps[6].pay, [0, 0, 0, 866]);
+  assert.deepEqual(steps.at(-1).cleared, ["student"]);
+});
+
+test("month by month: every month pays the whole $866 until the last, and the table adds up", () => {
+  const p = planPayoff(DEBTS, { strategy: "avalanche", extra: 300 });
+  p.schedule.slice(0, -1).forEach((r) => near(r.pay.reduce((s, x) => s + x, 0), 866, 0.02));
+  const paid = p.schedule.reduce((s, r) => s + r.pay.reduce((a, x) => a + x, 0), 0);
+  near(paid, p.totalPaid, 0.05);
+  near(p.totalPaid, 29650 + p.totalInterest, 0.05);
+  // tracking: the balance left after each month matches the chart's totals
+  p.schedule.forEach((r, i) => near(r.left.reduce((s, x) => s + x, 0), p.totals[i + 1], 0.05));
+  // a step's balances are the ones after its last month
+  const steps = paymentSteps(p);
+  near(steps[0].left[0], 63.1, 0.01);
+  assert.deepEqual(steps.at(-1).left, [0, 0, 0, 0]);
+});
+
+test("month by month: snowball's steps start on the store card and it clears in month 4", () => {
+  const steps = paymentSteps(planPayoff(DEBTS, { strategy: "snowball", extra: 300 }));
+  assert.deepEqual(steps[0].pot, ["store"]);
+  assert.deepEqual([steps[0].from, steps[0].to], [1, 3]);
+  assert.deepEqual(steps[1].cleared, ["store"]);
+  assert.equal(steps[1].from, 4);
+});
+
+test("month by month: nothing to plan gives no steps", () => {
+  assert.deepEqual(paymentSteps(planPayoff([], {})), []);
+  assert.deepEqual(paymentSteps(null), []);
+});
+
+test("the pick: least interest, and the price of the fastest first payoff", () => {
+  const r = recommend(compareStrategies(DEBTS, 300));
+  assert.equal(r.pick, "avalanche");
+  assert.equal(r.same, false);
+  assert.equal(r.win.key, "snowball");
+  assert.equal(r.win.firstWin, 4);
+  assert.equal(r.win.sooner, 8);
+  near(r.win.costs, 57.61);
+});
+
+test("the pick never flips as the extra changes on the tested debts", () => {
+  for (const x of [0, 25, 50, 100, 150, 200, 250, 300, 500, 1000]) assert.equal(recommend(compareStrategies(DEBTS, x)).pick, "avalanche", `at +$${x}`);
+});
+
+test("the pick: when every order is the same there is no trade to price", () => {
+  const two = [
+    { id: "a", bal: 1000, rate: 20, minPay: 50 },
+    { id: "b", bal: 5000, rate: 5, minPay: 100 },
+  ];
+  const r = recommend(compareStrategies(two, 100));
+  assert.equal(r.same, true);
+  assert.equal(r.win, null);
+  assert.equal(recommend(compareStrategies([], 0)), null);
 });

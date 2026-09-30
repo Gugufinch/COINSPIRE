@@ -107,6 +107,7 @@ export function planPayoff(debts, opts = {}) {
   const payHist = order.map(() => []);
   const totals = [round2(bal.reduce((s, b) => s + b, 0))];
   const monthly = [];
+  const schedule = [];
   let totalInterest = 0;
   let m = 0;
 
@@ -153,6 +154,7 @@ export function planPayoff(debts, opts = {}) {
     }
     totals.push(round2(bal.reduce((s, b) => s + Math.max(0, b), 0)));
     monthly.push(round2(payNow.reduce((s, p) => s + p, 0)));
+    schedule.push({ month: m, pay: payNow.map(round2), left: bal.map((b) => round2(Math.max(0, b))) });
   }
 
   const done = !open();
@@ -205,8 +207,58 @@ export function planPayoff(debts, opts = {}) {
     order: steps,
     totals,
     monthly,
+    schedule,
     firstWin: steps.reduce((best, s) => (s.payoffMonth !== null && (best === null || s.payoffMonth < best) ? s.payoffMonth : best), null),
   };
+}
+
+// The month-by-month plan, folded into steps: a step is a run of months that
+// pay every debt exactly the same, so a debt's last payment (and the month the
+// pot moves to the next debt) is its own step. Each step carries the payments
+// (aligned with plan.order), the balances left after its last month, and which
+// debts it clears. For the test debts that is 39 months in 8 steps.
+export function paymentSteps(plan) {
+  const out = [];
+  const sched = plan?.schedule || [];
+  const order = plan?.order || [];
+  for (const row of sched) {
+    const prev = out[out.length - 1];
+    const same = prev && prev.pay.every((p, k) => Math.abs(p - row.pay[k]) < EPS) && prev.cleared.length === 0;
+    const cleared = order.filter((st) => st.payoffMonth === row.month).map((st) => st.id);
+    if (same && cleared.length === 0) {
+      prev.to = row.month;
+      prev.months++;
+      prev.left = row.left;
+    } else {
+      out.push({ from: row.month, to: row.month, months: 1, pay: row.pay, left: row.left, cleared });
+    }
+  }
+  // who gets the pot in each step: every debt paid more than its own payment
+  for (const s of out) s.pot = order.filter((st, k) => s.pay[k] > st.minPay + EPS).map((st) => st.id);
+  return out;
+}
+
+// Which order to recommend: the one that pays the least interest. How much a
+// person values an early win is theirs to judge, so the pick never flips on a
+// threshold; instead it names the price of the fastest first payoff, when a
+// different order gets there sooner. Returns { pick, same, win } or null:
+// same = every order pays these debts identically; win = { key, firstWin,
+// sooner (months), costs (extra interest) } or null.
+export function recommend(cmp) {
+  const keys = Object.keys(STRATEGIES).filter((k) => cmp?.[k]?.done && cmp[k].order.length > 0);
+  if (!keys.length) return null;
+  const ids = (k) => cmp[k].order.map((s) => s.id).join();
+  const pick = keys.reduce((a, k) => (cmp[k].totalInterest < cmp[a].totalInterest - EPS ? k : a), keys[0]);
+  const base = cmp[pick];
+  let win = null;
+  for (const k of keys) {
+    if (ids(k) === ids(pick)) continue;
+    const c = cmp[k];
+    if (c.firstWin == null || base.firstWin == null || c.firstWin >= base.firstWin) continue;
+    const cand = { key: k, firstWin: c.firstWin, sooner: base.firstWin - c.firstWin, costs: round2(c.totalInterest - base.totalInterest) };
+    if (!win || cand.firstWin < win.firstWin || (cand.firstWin === win.firstWin && cand.costs < win.costs)) win = cand;
+  }
+  return { pick, same: keys.every((k) => ids(k) === ids(pick)), win };
 }
 
 // All three strategies at one extra amount, for the side-by-side choice.
