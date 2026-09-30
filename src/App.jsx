@@ -15,7 +15,7 @@ import {
   MessageCircle, Send, Hash
 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
-import { planPayoff, compareStrategies, parseExtraInput, STRATEGIES } from "./debtPlan.js";
+import { planPayoff, compareStrategies, parseExtraInput, paymentSteps, recommend, STRATEGIES } from "./debtPlan.js";
 
 // ── Supabase + RLS-aware token transport ──
 // Server-side RLS gates every read/write of user_data and user_pins on a
@@ -1179,6 +1179,9 @@ const MONO="'Space Mono',monospace";
 
 function PayoffPlan({T,debts,plan,strategy,setStrategy,extra,setExtra,loanBudget}){
 const cmp=useMemo(()=>compareStrategies(debts,extra),[debts,extra]);
+const rec=useMemo(()=>recommend(cmp),[cmp]);
+const steps=useMemo(()=>plan.done?paymentSteps(plan):[],[plan]);
+const[allSteps,setAllSteps]=useState(false);
 const presets=useMemo(()=>{const lb=Math.round(+loanBudget||0);const base=[0,50,100,200,300].map(amt=>({amt,note:""}));
 if(lb>0){const hit=base.find(p=>p.amt===lb);if(hit)hit.note="Extra Loan budget";else base.push({amt:lb,note:"Extra Loan budget"})}
 return base.sort((a,b)=>a.amt-b.amt)},[loanBudget]);
@@ -1265,8 +1268,9 @@ return(<div key={st.id} role="listitem" aria-posinset={i+1} aria-setsize={plan.o
 <div>
 <div style={group}>Pay first</div>
 <div role="radiogroup" aria-label="Payoff order" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:4,padding:4,borderRadius:14,border:`1px solid ${T.border}`}}>
-{Object.entries(STRATEGIES).map(([k,st])=>{const on=k===strategy;const c=cmp[k];const dup=sameAs(k);return(
-<button key={k} role="radio" aria-checked={on} onClick={()=>setStrategy(k)} style={segBtn(on)}>
+{Object.entries(STRATEGIES).map(([k,st])=>{const on=k===strategy;const c=cmp[k];const dup=sameAs(k);const pick=rec&&!rec.same&&rec.pick===k;return(
+<button key={k} role="radio" aria-checked={on} aria-label={`${st.label}${pick?", our pick":""}: ${c.done?`${usd0(c.totalInterest)} of interest`:"never paid off"}`} onClick={()=>setStrategy(k)} style={{...segBtn(on),position:"relative"}}>
+{pick&&<span aria-hidden style={{position:"absolute",top:-13,left:"50%",transform:"translateX(-50%)",padding:"1px 7px",borderRadius:6,background:T.card,border:`1px solid ${T.success}`,color:T.success,fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase",lineHeight:"13px",whiteSpace:"nowrap"}}>our pick</span>}
 <span style={{fontSize:13,fontWeight:700,color:on?T.success:T.text}}>{st.label}</span>
 <span style={{fontSize:12,fontWeight:700,fontFamily:MONO,color:on?T.text:T.textMuted}}>{c.done?usd0(c.totalInterest):"never"}</span>
 <span style={{fontSize:11,color:T.textDim}}>{dup?`same as ${dup}`:c.done?moAhead(c.months):""}</span></button>)})}</div>
@@ -1292,6 +1296,33 @@ style={{width:custom?`${Math.min(9,Math.max(2,custom.length))+1}ch`:"100%",minWi
 :<>Without extra it never clears. <strong style={{color:T.text,fontFamily:MONO}}>+{usd0(extra)}</strong> a month makes it {plan.months} months.</>}</div>}
 </div>
 </div>
+
+{/* month by month: what to pay each debt, and what's left, one row per step
+   (a run of months that pay the same); this month's row is always showing */}
+{steps.length>0&&<div data-steps style={{display:"flex",flexWrap:"wrap",alignItems:"flex-start",gap:"6px 40px",marginTop:20,paddingTop:18,borderTop:`1px solid ${T.border}`}}>
+<div style={{flex:"0 1 260px"}}>
+<div style={{...group,marginBottom:2}}>Month by month</div>
+<div style={{fontSize:12,color:T.textDim,lineHeight:1.45}}>What to pay each debt, and the balance left at the end of each step.</div></div>
+<div style={{flex:"1 1 420px",minWidth:0}}>
+<div style={{overflowX:"auto",width:0,minWidth:"100%"}}>
+<table style={{width:"100%",minWidth:62+plan.order.length*58,tableLayout:"fixed",borderCollapse:"collapse",fontVariantNumeric:"tabular-nums"}}>
+<thead><tr>
+<th scope="col" style={{width:62,position:"sticky",left:0,zIndex:1,background:T.card,textAlign:"left",fontSize:11,fontWeight:600,color:T.textDim,padding:"4px 6px 6px 0",verticalAlign:"bottom"}}>When</th>
+{plan.order.map(st=><th key={st.id} scope="col" style={{textAlign:"right",fontSize:11,fontWeight:600,color:T.textMuted,padding:"4px 0 6px 8px",verticalAlign:"bottom",lineHeight:1.25}}>{st.name}</th>)}
+</tr></thead>
+<tbody>{(allSteps?steps:steps.slice(0,1)).map((s,i)=>(
+<tr key={s.from} style={{borderTop:`1px solid ${T.border}`}}>
+<th scope="row" aria-label={s.months>1?`${moAheadLong(s.from)} to ${moAheadLong(s.to)}, ${s.months} months`:moAheadLong(s.from)} style={{position:"sticky",left:0,zIndex:1,background:T.card,textAlign:"left",padding:"8px 6px 8px 0",verticalAlign:"top",whiteSpace:"nowrap"}}>
+<div style={{fontSize:13,fontWeight:700,color:T.text}}>{moAhead(s.from)}</div>
+{s.months>1&&<div style={{fontSize:11,fontWeight:500,color:T.textDim}}>to {moAhead(s.to)}</div>}</th>
+{plan.order.map((st,k)=>{const pay=s.pay[k];const gone=s.cleared.includes(st.id);const pot=s.pot.includes(st.id);return(
+<td key={st.id} style={{textAlign:"right",padding:"8px 0 8px 8px",verticalAlign:"top",whiteSpace:"nowrap",fontFamily:MONO}}>
+{pay>.005&&<><div style={{fontSize:13,fontWeight:700,color:pot?T.success:T.text}}>{usd0(pay)}</div>
+<div style={{fontSize:11,color:gone?T.success:T.textDim,fontFamily:gone?"'Outfit','DM Sans',sans-serif":MONO,fontWeight:gone?700:400}}>{gone?"paid off":usd0(s.left[k])}</div></>}</td>)})}
+</tr>))}</tbody></table></div>
+{steps.length>1&&<button onClick={()=>setAllSteps(v=>!v)} aria-expanded={allSteps} style={{marginTop:8,width:"100%",minHeight:44,borderRadius:12,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:"pointer"}}>
+{allSteps?"Show this month only":`All ${steps.length} steps to ${moAheadLong(plan.months)}`}</button>}
+</div></div>}
 
 {plan.done&&<div style={{marginTop:18,fontSize:13,color:T.textMuted}}>After {moAheadLong(plan.months)}, <strong style={{color:T.success,fontFamily:MONO}}>{usd0(plan.budget)}</strong> a month is yours again.</div>}
 </div>)}
@@ -1348,6 +1379,8 @@ return(<div>
 <div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Note</div><input placeholder="Optional" value={nf.note} onChange={e=>setNf(p=>({...p,note:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
 <button onClick={addDebt} style={btnS(T,true)}><Check size={12}/></button></div></div>}
 
+{plan.order.length>0&&<PayoffPlan T={T} debts={debts} plan={plan} strategy={planStrat} setStrategy={setPlanStrat} extra={planExtra} setExtra={setPlanExtra} loanBudget={loanBudget}/>}
+
 {combined.length>1&&<div style={{...glass(T),marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
 <div style={lbl(T)}>Total Debt Forecast</div>
@@ -1364,7 +1397,6 @@ return(<div>
 <Area type="monotone" dataKey="debt" stroke={T.warn} strokeWidth={2} fill="url(#dfg)"/>
 <Area type="monotone" dataKey="plan" stroke={T.success} strokeWidth={2.5} fill="url(#dpg)"/></AreaChart></ResponsiveContainer></div>}
 
-{plan.order.length>0&&<PayoffPlan T={T} debts={debts} plan={plan} strategy={planStrat} setStrategy={setPlanStrat} extra={planExtra} setExtra={setPlanExtra} loanBudget={loanBudget}/>}
 
 {payoffs.map(d=>(
 <div key={d.id} style={{...glass(T),marginBottom:12}}>
