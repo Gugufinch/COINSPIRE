@@ -1328,7 +1328,7 @@ style={{width:custom?`${Math.min(9,Math.max(2,custom.length))+1}ch`:"100%",minWi
 </div>)}
 
 
-function DebtPage({T,debts,setDebts,loanBudget}){
+function DebtPage({T,mob,debts,setDebts,loanBudget}){
 const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal<=0||d.status==="paid");
 const totalDebt=active.reduce((s,d)=>s+(d.bal||0),0);
 const totalMonthly=active.reduce((s,d)=>s+(d.minPay||0),0);
@@ -1340,6 +1340,8 @@ const saveDebtEdit=()=>{setDebts(p=>p.map(d=>d.id===editId?{...d,name:ef.name,ba
 const addDebt=()=>{if(!nf.name||!nf.bal)return;setDebts(p=>[...p,{id:`d_${Date.now()}`,name:nf.name,bal:+nf.bal,rate:+nf.rate||0,minPay:+nf.minPay||0,status:"active",note:nf.note}]);setNf({name:"",bal:"",rate:"",minPay:"",note:""});setShowAdd(false)};
 const markPaid=(id)=>setDebts(p=>p.map(d=>d.id===id?{...d,bal:0,status:"paid"}:d));
 const removeDebt=(id)=>setDebts(p=>p.filter(d=>d.id!==id));
+// a phone gets 44px targets around the same small icons
+const ib=mob?{width:44,height:44,display:"flex",alignItems:"center",justifyContent:"center",padding:0}:{};
 
 const payoffs=active.filter(d=>(d.minPay||0)>0).map(d=>{const pay=d.minPay;const r=d.rate/100/12;const pts=[];let rem=d.bal;let m=0;const dt=new Date();
 while(rem>0&&m<120){pts.push({mo:`${MO[dt.getMonth()]}'${String(dt.getFullYear()).slice(2)}`,rem:Math.max(0,rem)});const interest=rem*r;rem=rem+interest-pay;m++;dt.setMonth(dt.getMonth()+1)}
@@ -1362,22 +1364,27 @@ let total=0;active.forEach(d=>{if((d.minPay||0)>0){const r=d.rate/100/12;let rem
 return{mo:label,debt:Math.round(total),plan:Math.round(plan.totals[i]??0)}});
 
 return(<div>
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14}}>
+{mob?<div style={{...glass(T),padding:"12px 4px",display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",marginBottom:10}}>
+{[{l:"Total Debt",v:fmt(totalDebt),c:totalDebt>0?T.warn:T.success},{l:"Eliminated",v:`${paid.length}/${debts.length}`,c:T.success},{l:"Monthly",v:fmt(totalMonthly),c:T.info}].map((st,i)=>(
+<div key={st.l} style={{padding:"0 10px",borderLeft:i?`1px solid ${T.border}`:"none",minWidth:0}}>
+<div style={{...lbl(T),fontSize:9,letterSpacing:1,marginBottom:4,whiteSpace:"nowrap"}}>{st.l}</div>
+<div style={{fontSize:16,fontWeight:800,letterSpacing:-.5,fontFamily:"'Space Mono',monospace",color:st.c,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{st.v}</div></div>))}</div>
+:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10,marginBottom:14}}>
 <StatCard title="Total Debt" value={fmt(totalDebt)} icon={CreditCard} color={totalDebt>0?T.warn:T.success} T={T}/>
 <StatCard title="Eliminated" value={`${paid.length}/${debts.length}`} icon={Check} color={T.success} T={T} subtitle={`${active.length} remaining`}/>
-<StatCard title="Monthly" value={fmt(totalMonthly)} icon={Calendar} color={T.info} T={T}/></div>
+<StatCard title="Monthly" value={fmt(totalMonthly)} icon={Calendar} color={T.info} T={T}/></div>}
 
 <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-<button onClick={()=>setShowAdd(!showAdd)} style={btnS(T,true)}><Plus size={11}/>Add Debt</button></div>
+<button onClick={()=>setShowAdd(!showAdd)} aria-expanded={showAdd} style={{...btnS(T,true),...(mob?{minHeight:44,padding:"0 16px",fontSize:13}:{})}}><Plus size={mob?14:11}/>Add Debt</button></div>
 
 {showAdd&&<div style={{...glass(T),marginBottom:14,animation:"fadeUp .2s ease"}}>
-<div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr auto",gap:8,alignItems:"end"}}>
-<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Name</div><input placeholder="Loan name" value={nf.name} onChange={e=>setNf(p=>({...p,name:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
-<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Balance</div><input type="number" placeholder="$" value={nf.bal} onChange={e=>setNf(p=>({...p,bal:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
-<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>APR %</div><input type="number" placeholder="0" value={nf.rate} onChange={e=>setNf(p=>({...p,rate:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
-<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Mo. Payment</div><input type="number" placeholder="$0" value={nf.minPay} onChange={e=>setNf(p=>({...p,minPay:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
-<div><div style={{fontSize:9,color:T.textDim,marginBottom:2}}>Note</div><input placeholder="Optional" value={nf.note} onChange={e=>setNf(p=>({...p,note:e.target.value}))} style={{...inpS(T),fontSize:11}}/></div>
-<button onClick={addDebt} style={btnS(T,true)}><Check size={12}/></button></div></div>}
+<div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"2fr 1fr 1fr 1fr 1fr auto",gap:mob?"12px 10px":8,alignItems:"end"}}>
+<div style={{gridColumn:mob?"1 / -1":undefined}}><label style={{display:"block"}}><div style={{fontSize:mob?11:9,color:T.textDim,marginBottom:mob?4:2}}>Name</div><input placeholder="Loan name" value={nf.name} onChange={e=>setNf(p=>({...p,name:e.target.value}))} style={{...inpS(T),fontSize:mob?16:11,...(mob?{minHeight:44}:{})}}/></label></div>
+<div><label style={{display:"block"}}><div style={{fontSize:mob?11:9,color:T.textDim,marginBottom:mob?4:2}}>Balance</div><input type="number" placeholder="$" value={nf.bal} onChange={e=>setNf(p=>({...p,bal:e.target.value}))} inputMode="decimal" style={{...inpS(T),fontSize:mob?16:11,...(mob?{minHeight:44}:{})}}/></label></div>
+<div><label style={{display:"block"}}><div style={{fontSize:mob?11:9,color:T.textDim,marginBottom:mob?4:2}}>APR %</div><input type="number" placeholder="0" value={nf.rate} onChange={e=>setNf(p=>({...p,rate:e.target.value}))} inputMode="decimal" style={{...inpS(T),fontSize:mob?16:11,...(mob?{minHeight:44}:{})}}/></label></div>
+<div><label style={{display:"block"}}><div style={{fontSize:mob?11:9,color:T.textDim,marginBottom:mob?4:2}}>Mo. Payment</div><input type="number" placeholder="$0" value={nf.minPay} onChange={e=>setNf(p=>({...p,minPay:e.target.value}))} inputMode="decimal" style={{...inpS(T),fontSize:mob?16:11,...(mob?{minHeight:44}:{})}}/></label></div>
+<div><label style={{display:"block"}}><div style={{fontSize:mob?11:9,color:T.textDim,marginBottom:mob?4:2}}>Note</div><input placeholder="Optional" value={nf.note} onChange={e=>setNf(p=>({...p,note:e.target.value}))} style={{...inpS(T),fontSize:mob?16:11,...(mob?{minHeight:44}:{})}}/></label></div>
+<button onClick={addDebt} aria-label="Add this debt" style={{...btnS(T,true),justifyContent:"center",...(mob?{gridColumn:"1 / -1",minHeight:44,fontSize:13}:{})}}><Check size={mob?14:12}/>{mob?"Add this debt":null}</button></div></div>}
 
 {plan.order.length>0&&<PayoffPlan T={T} debts={debts} plan={plan} strategy={planStrat} setStrategy={setPlanStrat} extra={planExtra} setExtra={setPlanExtra} loanBudget={loanBudget}/>}
 
@@ -1408,9 +1415,9 @@ return(<div>
 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
 {planBy[d.id]?.payoffMonth&&<div style={pill(T.successBg,T.success)}>#{planBy[d.id].rank} in plan · {moAhead(planBy[d.id].payoffMonth)}</div>}
 <div style={pill(T.infoBg,T.info)}>Minimum only: {d.freeDate} ({d.months}mo)</div></div></div>
-<div style={{display:"flex",flexDirection:"column",gap:2}}>
-<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}} title="Edit"><Edit3 size={12}/></button>
-<button onClick={()=>markPaid(d.id)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",opacity:.4}} title="Mark paid off"><Check size={12}/></button>
+<div style={{display:"flex",flexDirection:"column",gap:mob?0:2,marginRight:mob?-14:0}}>
+<button onClick={()=>startEdit(d)} aria-label={`Edit ${d.name}`} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4,...ib}} title="Edit"><Edit3 size={12}/></button>
+<button onClick={()=>markPaid(d.id)} aria-label={`Mark ${d.name} paid off`} style={{background:"none",border:"none",color:T.success,cursor:"pointer",opacity:.4,...ib}} title="Mark paid off"><Check size={12}/></button>
 </div></div></div>
 <ResponsiveContainer width="100%" height={100}>
 <AreaChart data={d.pts}><defs><linearGradient id={`dg${d.id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.warn} stopOpacity={.3}/><stop offset="100%" stopColor={T.success} stopOpacity={.05}/></linearGradient></defs>
@@ -1427,11 +1434,11 @@ return(<div>
 <div style={{fontSize:13,fontWeight:600}}>{d.name||"Unknown"}</div>
 <div style={{fontSize:10,color:T.textDim}}>{d.rate?d.rate+"% APR • ":""}No active payments{d.note?` • ${d.note}`:""}</div>
 {planBy[d.id]?.payoffMonth&&<div style={{...pill(T.successBg,T.success),marginTop:4}}>#{planBy[d.id].rank} in plan · {moAhead(planBy[d.id].payoffMonth)}</div>}</div>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
-<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn,fontSize:16}}>{fmt(d.bal)}</span>
-<button onClick={()=>startEdit(d)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4}} title="Edit"><Edit3 size={12}/></button>
-<button onClick={()=>markPaid(d.id)} style={{background:"none",border:"none",color:T.success,cursor:"pointer",opacity:.4}} title="Mark paid"><Check size={12}/></button>
-<button onClick={()=>removeDebt(d.id)} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.2}} title="Remove"><Trash2 size={10}/></button></div></div>)}</div>}
+<div style={{display:"flex",alignItems:"center",gap:mob?0:8,marginRight:mob?-14:0}}>
+<span style={{fontWeight:700,fontFamily:"'Space Mono',monospace",color:T.warn,fontSize:16,marginRight:mob?4:0}}>{fmt(d.bal)}</span>
+<button onClick={()=>startEdit(d)} aria-label={`Edit ${d.name||"debt"}`} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.4,...ib}} title="Edit"><Edit3 size={12}/></button>
+<button onClick={()=>markPaid(d.id)} aria-label={`Mark ${d.name||"debt"} paid`} style={{background:"none",border:"none",color:T.success,cursor:"pointer",opacity:.4,...ib}} title="Mark paid"><Check size={12}/></button>
+<button onClick={()=>removeDebt(d.id)} aria-label={`Remove ${d.name||"debt"}`} style={{background:"none",border:"none",color:T.textDim,cursor:"pointer",opacity:.2,...ib}} title="Remove"><Trash2 size={10}/></button></div></div>)}</div>}
 
 {paid.length>0&&<div style={{...glass(T),marginTop:14}}>
 <div style={lbl(T)}>Eliminated 💀</div>
@@ -1443,8 +1450,8 @@ return(<div>
 <div style={{display:"grid",gap:10}}>
 {[{k:"name",l:"Name",t:"text"},{k:"bal",l:"Balance",t:"number"},{k:"rate",l:"APR %",t:"number"},{k:"minPay",l:"Monthly Payment",t:"number"},{k:"note",l:"Note",t:"text"}].map(f=>(
 <div key={f.k}><div style={{fontSize:10,color:T.textDim,marginBottom:3}}>{f.l}</div>
-<input type={f.t} value={ef[f.k]||""} onChange={e=>setEf(p=>({...p,[f.k]:e.target.value}))} style={{...inpS(T),fontSize:13,padding:"8px 12px"}}/></div>))}
-<button onClick={saveDebtEdit} style={{...btnS(T,true),justifyContent:"center"}}><Check size={12}/>Save</button></div></Modal>}
+<input type={f.t} inputMode={f.t==="number"?"decimal":undefined} value={ef[f.k]||""} onChange={e=>setEf(p=>({...p,[f.k]:e.target.value}))} style={{...inpS(T),fontSize:mob?16:13,padding:"8px 12px",...(mob?{minHeight:44}:{})}}/></div>))}
+<button onClick={saveDebtEdit} style={{...btnS(T,true),justifyContent:"center",...(mob?{minHeight:44,fontSize:13}:{})}}><Check size={12}/>Save</button></div></Modal>}
 </div>)}
 
 function SplitsPage({T,recurring,subs,splits,setSplits,customSplits,setCustomSplits,recurringSplits,setRecurringSplits,mo,billsPaid,billActuals,splitPartner}){
@@ -2441,7 +2448,7 @@ const renderPage=()=>{switch(tab){
 case"dash":return<DashPage T={T} accent={accent} setDashWidgets={setDashWidgets} data={{cur,prev,nw,nwP,totS,totB,txns,day:effectiveDay,history,dim,savR,totD,ins:insights,insI,mOff,sideIncome,debts,fixedBillTotal:recurring.filter(r=>r.kind!=="variable").reduce((s,r)=>s+r.amt,0),varCap,totBills,dashWidgets,userGoals,goalContribs,exitDate,exitLabel}} qa={qa} setQa={setQa} undoStack={undoStack} undo={()=>{if(undoStack.length===0)return;const last=undoStack[0];if(last.type==="txn"){const mk=last.mo;setMonths(p=>({...p,[mk]:{...p[mk],txns:[...(p[mk]?.txns||[]),last.data]}}))}setUndoStack(p=>p.slice(1))}} addQA={()=>{const m=qa.match(/\$?([\d.]+)\s+(.+)/);if(m){addTxnsSmart([{id:Date.now(),d:new Date().toISOString().split("T")[0],desc:m[2].trim(),amt:parseFloat(m[1]),cat:autoCat(m[2].trim())||"misc",card:"debit"}]);setQa("")}}}/>;
 case"txn":return<TxnPage T={T} txns={txns} setTxns={setTxns} addTxnsSmart={addTxnsSmart} cats={cats} byCat={byCat} billNames={billNames} mo={mo} apiKey={apiKey} aiModel={aiModel} callAI={callAI} provider={aiProvider} customSplits={customSplits} setCustomSplits={setCustomSplits} userCards={userCards} splitPartner={splitPartner} undoStack={undoStack} setUndoStack={setUndoStack}/>;
 case"bud":return<BudgetPage T={T} cats={cats} setCats={setCats} byCat={byCat} totS={totS} totB={totB} bal={bal} varCap={varCap} fixedBillTotal={bal.fix}/>;
-case"debt":return<DebtPage T={T} debts={debts} setDebts={setDebts} loanBudget={cats.find(c=>c.id==="loan")?.budget||0}/>;
+case"debt":return<DebtPage T={T} mob={mob} debts={debts} setDebts={setDebts} loanBudget={cats.find(c=>c.id==="loan")?.budget||0}/>;
 case"sav":return<SavingsPage T={T} bal={bal} setBal={setBal} cur={cur} savAccounts={savAccounts} setSavAccounts={setSavAccounts}/>;
 case"sub":return<BillsPage T={T} splitPartner={splitPartner} recurring={recurring} setRecurring={setRecurring} subs={subs} setSubs={setSubs} billsPaid={billsPaid} setBillsPaid={setBillsPaid} billActuals={billActuals} setBillActuals={setBillActuals} splits={splits} setSplits={setSplits} mo={mo} addTxnsSmart={addTxnsSmart} bal={bal} varCap={varCap} setVarCap={setVarCap}/>;
 case"splits":return<SplitsPage T={T} recurring={recurring} subs={subs} splits={splits} setSplits={setSplits} customSplits={customSplits} setCustomSplits={setCustomSplits} recurringSplits={recurringSplits} setRecurringSplits={setRecurringSplits} mo={mo} billsPaid={billsPaid} billActuals={billActuals} splitPartner={splitPartner}/>;
