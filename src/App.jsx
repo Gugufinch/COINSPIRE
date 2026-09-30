@@ -1200,50 +1200,85 @@ if(same(sel,av))return"Same order as Avalanche on these debts, so it costs nothi
 const d=sel.totalInterest-av.totalInterest;const mo=sel.months-av.months;
 return`${usd0(d)} more interest than Avalanche${mo>0?` and ${mo} month${mo>1?"s":""} longer`:""}${sel.firstWin&&av.firstWin&&sel.firstWin<av.firstWin?`, for a first payoff in month ${sel.firstWin} instead of ${av.firstWin}`:""}.`};
 
-const seg=(on)=>({minHeight:60,minWidth:0,padding:"10px 6px",borderRadius:12,border:`1px solid ${on?T.success:T.border}`,background:on?T.successBg:"transparent",color:T.text,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,fontFamily:"inherit",transition:"all .15s"});
+// A strategy whose order is identical to an earlier one says so, instead of
+// showing the same price and month twice as if it were a different plan.
+const ids=(p)=>p.order.map(s=>s.id).join();
+const sameAs=(k)=>{if(k==="snowball"&&ids(cmp.snowball)===ids(cmp.avalanche))return"Avalanche";
+if(k==="hybrid"){if(ids(cmp.hybrid)===ids(cmp.avalanche))return"Avalanche";if(ids(cmp.hybrid)===ids(cmp.snowball))return"Snowball"}return null};
+
+const chip=(on)=>({minHeight:56,minWidth:0,padding:"8px 6px",borderRadius:12,border:`1px solid ${on?T.success:T.border}`,background:on?T.successBg:"transparent",color:T.text,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,fontFamily:"inherit",transition:"background .15s, border-color .15s"});
+const segBtn=(on)=>({...chip(on),border:`1px solid ${on?T.success:"transparent"}`,borderRadius:10});
+const group={fontSize:12,fontWeight:600,color:T.textMuted,marginBottom:8};
 const span=Math.max(1,plan.months);
 const waitBg=`repeating-linear-gradient(135deg,${T.textDim}66 0 3px,transparent 3px 6px)`;
+const still=typeof window!=="undefined"&&window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const ease=(p)=>still?"none":`${p} .45s cubic-bezier(.2,.8,.2,1)`;
+const ROW=40,BAR=10,COLS="minmax(84px,17%) minmax(0,1fr) 46px";
+const pct=(m)=>`${Math.min(100,Math.max(0,m/span*100))}%`;
+const hasHold=plan.order.some(st=>st.hold);
+const sw=(bg,op=1)=>({display:"inline-block",width:14,height:6,borderRadius:3,background:bg,opacity:op,marginRight:5,verticalAlign:"middle"});
 
 return(<div data-plan style={{...glass(T),marginBottom:14}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:10,flexWrap:"wrap",marginBottom:14}}>
-<div style={{...lbl(T),marginBottom:0}}>Payoff Plan</div>
-<div style={{fontSize:11,color:T.textMuted}}>{usd0(plan.budget)}/mo in one pot. A paid-off debt's payment rolls to the next.</div></div>
+<div style={{...lbl(T),marginBottom:10}}>Payoff Plan</div>
 
-<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,340px),1fr))",gap:24}}>
-<div>
-{/* hero */}
-<div style={{marginBottom:18}}>
-<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Debt-free</div>
-{plan.done?<div style={{fontSize:40,fontWeight:800,letterSpacing:-2,wordSpacing:"-.3em",fontFamily:MONO,color:T.success,lineHeight:1.1}}>{moAheadLong(plan.months)}</div>
-:<div><div style={{fontSize:22,fontWeight:800,fontFamily:MONO,color:T.danger,lineHeight:1.2}}>Not in 50 years</div>
+{/* the finish line, and the staircase that reaches it: side by side when
+   there is room, stacked on a phone */}
+<div style={{display:"flex",flexWrap:"wrap",alignItems:"flex-start",gap:"16px 40px"}}>
+{plan.done?<div style={{flex:"0 1 260px"}}>
+<div style={{fontSize:13,color:T.textMuted}}>Debt-free in</div>
+<div style={{fontSize:44,fontWeight:800,letterSpacing:-2,wordSpacing:"-.3em",fontFamily:MONO,color:T.success,lineHeight:1.05}}>{moAheadLong(plan.months)}</div>
+<div style={{fontSize:13,color:T.textMuted,marginTop:6}}><strong style={{fontFamily:MONO,color:T.text}}>{plan.months}</strong> months · <strong style={{fontFamily:MONO,color:T.warn}}>{usd0(plan.totalInterest)}</strong> of interest</div></div>
+:<div style={{flex:"0 1 260px"}}><div style={{fontSize:22,fontWeight:800,fontFamily:MONO,color:T.danger,lineHeight:1.2}}>Not in 50 years</div>
 <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>The payments don't cover the interest. Add extra below or raise a payment.</div></div>}
-{plan.done&&<div style={{display:"flex",gap:18,marginTop:10,flexWrap:"wrap"}}>
-{[["Months",plan.months,T.text],["Interest",usd0(plan.totalInterest),T.warn]].map(([l,v,c])=><div key={l}>
-<div style={{fontSize:9,color:T.textDim,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{l}</div>
-<div style={{fontSize:16,fontWeight:700,fontFamily:MONO,color:c}}>{v}</div></div>)}</div>}
+
+{/* the staircase: one shared clock, each debt amber on its own payment until
+   the pot reaches it, then green until it's gone. Rows are keyed and slide
+   when the order changes, bars slide when the extra changes. */}
+<div style={{flex:"1 1 420px",minWidth:0}}>
+<div role="list" aria-label="Who gets paid off when" style={{position:"relative",height:plan.order.length*ROW}}>
+{plan.done&&<div aria-hidden style={{position:"absolute",top:4,bottom:4,right:56,borderLeft:`1px dashed ${T.success}`,opacity:.55}}/>}
+{/* rendered in a fixed DOM order (by id) so a new order only changes each
+   row's translateY: moving DOM nodes would make them jump, not slide */}
+{plan.order.map((st,i)=>[st,i]).sort((a,b)=>String(a[0].id).localeCompare(String(b[0].id))).map(([st,i])=>{const pm=st.payoffMonth;const end=pm??span;const bs=st.boostFrom!=null&&st.boostFrom<=end?st.boostFrom-1:end;
+const boosted=st.topPay>st.minPay+.005;const last=pm!=null&&pm===plan.months;
+const say=`${st.name}: ${pm?`paid off ${moAheadLong(pm)}, month ${pm}`:"not paid off"}${boosted?`, ${usd0(st.topPay)} a month once the pot reaches it`:""}${st.rollsTo?`, then ${usd0(st.rollsTo.gets)} a month goes to ${st.rollsTo.name}`:""}.`;
+return(<div key={st.id} role="listitem" aria-posinset={i+1} aria-setsize={plan.order.length} aria-label={`${i+1}. ${say}`} title={say} style={{position:"absolute",left:0,right:0,top:0,height:ROW,transform:`translateY(${i*ROW}px)`,transition:ease("transform"),display:"grid",gridTemplateColumns:COLS,alignItems:"center",columnGap:8}}>
+<div style={{minWidth:0}}>
+<div style={{fontSize:13,fontWeight:700,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{st.name}</div>
+<div style={{fontSize:11,fontFamily:MONO,lineHeight:1.35,color:boosted?T.textMuted:T.textDim,whiteSpace:"nowrap"}}>{usd0(st.topPay)}/mo</div></div>
+<div style={{position:"relative",height:BAR,borderRadius:BAR/2,background:`${T.border}88`,overflow:"hidden"}}>
+{plan.done&&<><div style={{position:"absolute",left:0,top:0,bottom:0,width:pct(bs),transition:ease("width"),...(st.hold?{background:waitBg}:{background:T.warn,opacity:.5})}}/>
+<div style={{position:"absolute",left:pct(bs),top:0,bottom:0,width:pct(Math.max(0,end-bs)),background:T.success,borderRadius:BAR/2,transition:still?"none":"left .45s cubic-bezier(.2,.8,.2,1), width .45s cubic-bezier(.2,.8,.2,1)"}}/></>}</div>
+<div style={{textAlign:"right",fontSize:13,fontWeight:700,whiteSpace:"nowrap",color:!pm?T.danger:last?T.success:T.text}}>{pm?moAhead(pm):"never"}</div>
+</div>)})}
 </div>
+{plan.done&&<div style={{display:"flex",flexWrap:"wrap",gap:"4px 14px",fontSize:11,color:T.textDim,marginTop:4}}>
+<span><span style={sw(T.warn,.5)}/>own payment</span>
+{hasHold&&<span><span style={sw(waitBg)}/>on hold</span>}
+<span><span style={sw(T.success)}/>the pot (extra + rollover)</span></div>}
+</div></div>
 
-{/* order choice, each option shows what it costs */}
-<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginBottom:6}}>Order</div>
-<div role="radiogroup" aria-label="Payoff order" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
-{Object.entries(STRATEGIES).map(([k,st])=>{const on=k===strategy;const c=cmp[k];return(
-<button key={k} role="radio" aria-checked={on} onClick={()=>setStrategy(k)} style={seg(on)}>
-<span style={{fontSize:12,fontWeight:700,color:on?T.success:T.text}}>{st.label}</span>
+{/* the two choices, each priced where you pick it */}
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,300px),1fr))",gap:"18px 28px",marginTop:20,paddingTop:18,borderTop:`1px solid ${T.border}`}}>
+<div>
+<div style={group}>Pay first</div>
+<div role="radiogroup" aria-label="Payoff order" style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:4,padding:4,borderRadius:14,border:`1px solid ${T.border}`}}>
+{Object.entries(STRATEGIES).map(([k,st])=>{const on=k===strategy;const c=cmp[k];const dup=sameAs(k);return(
+<button key={k} role="radio" aria-checked={on} onClick={()=>setStrategy(k)} style={segBtn(on)}>
+<span style={{fontSize:13,fontWeight:700,color:on?T.success:T.text}}>{st.label}</span>
 <span style={{fontSize:12,fontWeight:700,fontFamily:MONO,color:on?T.text:T.textMuted}}>{c.done?usd0(c.totalInterest):"never"}</span>
-<span style={{fontSize:11,color:T.textDim}}>{c.done?`free ${moAhead(c.months)}`:""}</span></button>)})}</div>
+<span style={{fontSize:11,color:T.textDim}}>{dup?`same as ${dup}`:c.done?moAhead(c.months):""}</span></button>)})}</div>
 <div style={{fontSize:12,color:T.textMuted,marginTop:8,lineHeight:1.45}}><strong style={{color:T.text}}>{STRATEGIES[strategy].rule}.</strong> {STRATEGIES[strategy].why}{other()?<><br/><span style={{color:T.textDim}}>{other()}</span></>:null}</div>
-
-{/* extra each month: every chip is a what-if with its debt-free month, tap to use it.
-   Chips, not rows, so on a phone the hero, the order and the extra sit on one screen
-   and the staircase starts right under them. */}
-<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700,marginTop:18,marginBottom:6}}>Extra each month</div>
+</div>
+<div>
+<div style={group}>Add each month</div>
 <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6}}>
 {rows.map(r=>{const on=r.amt===extra&&!custom;const p=r.plan;return(
-<button key={r.amt} onClick={()=>pickPreset(r.amt)} aria-pressed={on} style={seg(on)}>
+<button key={r.amt} onClick={()=>pickPreset(r.amt)} aria-pressed={on} style={chip(on)}>
 <span style={{fontSize:15,fontWeight:800,fontFamily:MONO,color:on?T.success:T.text}}>+{usd0(r.amt)}</span>
 <span style={{fontSize:12,fontWeight:600,color:p.done?(on?T.text:T.textMuted):T.danger}}>{p.done?moAhead(p.months):"never"}</span>
 {r.note==="Extra Loan budget"&&<span style={{fontSize:11,color:T.textDim}}>loan budget</span>}</button>)})}
-<label data-other style={{...seg(!!custom),cursor:"text",gridColumn:`span ${3-(presets.length%3)}`}}>
+<label data-other style={{...chip(!!custom),cursor:"text",gridColumn:`span ${3-(presets.length%3)}`}}>
 <span style={{display:"flex",alignItems:"baseline",justifyContent:"center",width:"100%"}}>
 {custom&&<span style={{fontSize:15,fontWeight:800,fontFamily:MONO,color:T.success}}>+$</span>}
 <input type="text" inputMode="decimal" autoComplete="off" enterKeyHint="done" placeholder="Other" value={custom} onChange={e=>typeCustom(e.target.value)} aria-label="Other extra amount per month"
@@ -1254,34 +1289,11 @@ style={{width:custom?`${Math.min(9,Math.max(2,custom.length))+1}ch`:"100%",minWi
 :zero&&zero.done?<><strong style={{color:T.text,fontFamily:MONO}}>+{usd0(extra)}</strong> a month beats no extra by <strong style={{color:T.text}}>{zero.months-plan.months} months</strong> and <strong style={{color:T.text}}>{usd0(zero.totalInterest-plan.totalInterest)}</strong> of interest.</>
 :<>Without extra it never clears. <strong style={{color:T.text,fontFamily:MONO}}>+{usd0(extra)}</strong> a month makes it {plan.months} months.</>}</div>}
 </div>
+</div>
 
-{/* the order, as a staircase: own payment, then the extra and rollover arrive, then gone */}
-<div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
-<div style={{fontSize:10,color:T.textDim,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>Who gets paid off when</div>
-{plan.done&&<div style={{display:"flex",gap:10,fontSize:11,color:T.textDim}}>
-<span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:T.warn,opacity:.5}}/>own payment</span>
-{plan.order.some(st=>st.hold)&&<span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:waitBg}}/>on hold</span>}
-<span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:14,height:6,borderRadius:3,background:T.success}}/>extra + rollover</span></div>}</div>
-{plan.order.map((st,i)=>{const pm=st.payoffMonth;const bf=st.boostFrom;const end=pm??span;const boostStart=bf!=null&&bf<=end?bf-1:end;return(
-<div key={st.id} style={{display:"flex",gap:12,padding:"12px 0",borderBottom:i<plan.order.length-1?`1px solid ${T.border}`:"none"}}>
-<div style={{width:26,height:26,flex:"0 0 26px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,color:T.textMuted,fontSize:12,fontWeight:800,fontFamily:MONO,display:"flex",alignItems:"center",justifyContent:"center"}}>{i+1}</div>
-<div style={{flex:1,minWidth:0}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
-<span style={{fontSize:14,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</span>
-<span style={{fontSize:13,fontWeight:700,color:pm?T.text:T.danger,whiteSpace:"nowrap"}}>{pm?moAheadLong(pm):"not paid off"}</span></div>
-<div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11,color:T.textDim,marginTop:1}}>
-<span>{st.rate}% APR · {usd0(st.bal)}{st.hold?" · on hold, goes last":""}</span>{pm&&<span>month {pm}</span>}</div>
-{plan.done&&<div style={{position:"relative",height:8,borderRadius:4,background:T.bg,marginTop:8,overflow:"hidden"}}>
-<div style={{position:"absolute",left:0,top:0,bottom:0,width:`${boostStart/span*100}%`,transition:"width .35s ease",...(st.hold?{background:waitBg}:{background:T.warn,opacity:.5})}}/>
-<div style={{position:"absolute",left:`${boostStart/span*100}%`,top:0,bottom:0,width:`${Math.max(0,end-boostStart)/span*100}%`,background:T.success,borderRadius:4,transition:"left .35s ease, width .35s ease"}}/></div>}
-{st.rollsTo&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>then <strong style={{color:T.text,fontFamily:MONO}}>{usd0(st.rollsTo.gets)}</strong>/mo goes to {st.rollsTo.name}</div>}
-</div></div>)})}
-{plan.done&&plan.order.length>0&&<div style={{marginTop:14,padding:"12px 14px",borderRadius:12,background:T.bg,fontSize:12,color:T.textMuted,lineHeight:1.45}}>
-After {moAheadLong(plan.months)}, <strong style={{color:T.success,fontFamily:MONO}}>{usd0(plan.budget)}</strong> a month is yours again.</div>}
-</div>
-</div>
+{plan.done&&<div style={{marginTop:18,fontSize:13,color:T.textMuted}}>After {moAheadLong(plan.months)}, <strong style={{color:T.success,fontFamily:MONO}}>{usd0(plan.budget)}</strong> a month is yours again.</div>}
 </div>)}
+
 
 function DebtPage({T,debts,setDebts,loanBudget}){
 const active=debts.filter(d=>d.bal>0);const paid=debts.filter(d=>d.bal<=0||d.status==="paid");
